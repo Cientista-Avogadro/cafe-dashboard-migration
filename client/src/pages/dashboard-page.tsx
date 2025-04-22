@@ -5,6 +5,7 @@ import Alerts from "@/components/dashboard/alerts";
 import FinancialChart from "@/components/dashboard/financial-chart";
 import ProductionChart from "@/components/dashboard/production-chart";
 import RecentActivities from "@/components/dashboard/recent-activities";
+import { HasuraStatus } from "@/components/ui/hasura-status";
 import { useAuth } from "@/hooks/use-auth";
 import { Farm, Alert, Activity, FinancialData, ProductionData } from "@/lib/types";
 
@@ -140,12 +141,17 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
-        <p className="text-slate-500">
-          Visão geral da sua operação agrícola
-          {user ? `, ${user.username}` : ''}
-        </p>
+      <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
+          <p className="text-slate-500">
+            Visão geral da sua operação agrícola
+            {user ? `, ${user.username}` : ''}
+          </p>
+        </div>
+        <div className="mt-2 md:mt-0">
+          <HasuraStatus />
+        </div>
       </div>
 
       {/* Quick Stats */}
