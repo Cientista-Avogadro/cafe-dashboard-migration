@@ -46,29 +46,27 @@ const INSERT_USER = gql`
   }
 `;
 
-// Interfaces para os resultados do Hasura
+// Interfaces para os resultados do Hasura que seguem a estrutura do tipo User do schema.ts
+interface HasuraUser {
+  id: number;
+  username: string;
+  password?: string;
+  name?: string | null;
+  email?: string | null;
+  role?: string | null;
+  created_at?: string | null;
+}
+
 interface GetUserByUsernameResult {
-  users: Array<{
-    id: number;
-    username: string;
-    password: string;
-  }>;
+  users: Array<HasuraUser>;
 }
 
 interface GetUserByIdResult {
-  users_by_pk: {
-    id: number;
-    username: string;
-    created_at: string;
-  } | null;
+  users_by_pk: HasuraUser | null;
 }
 
 interface InsertUserResult {
-  insert_users_one: {
-    id: number;
-    username: string;
-    created_at: string;
-  };
+  insert_users_one: HasuraUser;
 }
 
 // Funções para interagir com o Hasura

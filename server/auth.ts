@@ -8,9 +8,22 @@ import { storage } from "./storage";
 import { User as UserType } from "@shared/schema";
 import * as hasuraService from "./hasura";
 
+// Define a interface do usuário para Express de acordo com a definição em schema.ts
+type ExpressUserType = {
+  id: number;
+  username: string;
+  password?: string;
+  name?: string | null;
+  email?: string | null;
+  role?: string | null;
+  created_at?: Date | string | null;
+  [key: string]: any;
+};
+
 declare global {
   namespace Express {
-    interface User extends UserType {}
+    // Use uma interface diferente para evitar referência circular
+    interface User extends ExpressUserType {}
   }
 }
 
