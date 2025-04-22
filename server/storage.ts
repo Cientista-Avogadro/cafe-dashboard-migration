@@ -7,8 +7,12 @@ import {
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import connectPg from "connect-pg-simple";
+import { db, pool } from "./db";
+import { eq, desc } from "drizzle-orm";
 
 const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPg(session);
 
 export interface IStorage {
   // User methods
@@ -83,7 +87,7 @@ export interface IStorage {
   getDashboardData(userId: number): Promise<any>;
   
   // Session store
-  sessionStore: session.SessionStore;
+  sessionStore: any; // Store de sessão
 }
 
 export class MemStorage implements IStorage {
@@ -109,7 +113,7 @@ export class MemStorage implements IStorage {
   currentTransactionId: number;
   currentActivityId: number;
   
-  sessionStore: session.SessionStore;
+  sessionStore: any;
 
   constructor() {
     this.users = new Map();
@@ -540,4 +544,399 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export class DatabaseStorage implements IStorage {
+  sessionStore: any;
+
+  constructor() {
+    this.sessionStore = new PostgresSessionStore({ 
+      pool, 
+      createTableIfMissing: true 
+    });
+  }
+
+  // User methods
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+  
+  // Farm methods
+  async getFarms(userId?: number): Promise<Farm[]> {
+    if (userId) {
+      return await db.select().from(farms).where(eq(farms.user_id, userId));
+    }
+    return await db.select().from(farms);
+  }
+  
+  async getFarm(id: number): Promise<Farm | undefined> {
+    const [farm] = await db.select().from(farms).where(eq(farms.id, id));
+    return farm || undefined;
+  }
+  
+  async createFarm(farm: InsertFarm): Promise<Farm> {
+    const [newFarm] = await db.insert(farms).values(farm).returning();
+    return newFarm;
+  }
+  
+  async updateFarm(id: number, farmData: Partial<InsertFarm>): Promise<Farm | undefined> {
+    const [updatedFarm] = await db
+      .update(farms)
+      .set(farmData)
+      .where(eq(farms.id, id))
+      .returning();
+    return updatedFarm || undefined;
+  }
+  
+  async deleteFarm(id: number): Promise<boolean> {
+    const result = await db.delete(farms).where(eq(farms.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+  
+  // Sector methods
+  async getSectors(farmId?: number): Promise<Sector[]> {
+    if (farmId) {
+      return await db.select().from(sectors).where(eq(sectors.farm_id, farmId));
+    }
+    return await db.select().from(sectors);
+  }
+  
+  async getSector(id: number): Promise<Sector | undefined> {
+    const [sector] = await db.select().from(sectors).where(eq(sectors.id, id));
+    return sector || undefined;
+  }
+  
+  async createSector(sector: InsertSector): Promise<Sector> {
+    const [newSector] = await db.insert(sectors).values(sector).returning();
+    return newSector;
+  }
+  
+  async updateSector(id: number, sectorData: Partial<InsertSector>): Promise<Sector | undefined> {
+    const [updatedSector] = await db
+      .update(sectors)
+      .set(sectorData)
+      .where(eq(sectors.id, id))
+      .returning();
+    return updatedSector || undefined;
+  }
+  
+  async deleteSector(id: number): Promise<boolean> {
+    const result = await db.delete(sectors).where(eq(sectors.id, id));
+    return !!result.rowCount;
+  }
+  
+  // Lot methods
+  async getLots(sectorId?: number): Promise<Lot[]> {
+    if (sectorId) {
+      return await db.select().from(lots).where(eq(lots.sector_id, sectorId));
+    }
+    return await db.select().from(lots);
+  }
+  
+  async getLot(id: number): Promise<Lot | undefined> {
+    const [lot] = await db.select().from(lots).where(eq(lots.id, id));
+    return lot || undefined;
+  }
+  
+  async createLot(lot: InsertLot): Promise<Lot> {
+    const [newLot] = await db.insert(lots).values(lot).returning();
+    return newLot;
+  }
+  
+  async updateLot(id: number, lotData: Partial<InsertLot>): Promise<Lot | undefined> {
+    const [updatedLot] = await db
+      .update(lots)
+      .set(lotData)
+      .where(eq(lots.id, id))
+      .returning();
+    return updatedLot || undefined;
+  }
+  
+  async deleteLot(id: number): Promise<boolean> {
+    const result = await db.delete(lots).where(eq(lots.id, id));
+    return result.rowCount > 0;
+  }
+  
+  // Crop methods
+  async getCrops(): Promise<Crop[]> {
+    return await db.select().from(crops);
+  }
+  
+  async getCrop(id: number): Promise<Crop | undefined> {
+    const [crop] = await db.select().from(crops).where(eq(crops.id, id));
+    return crop || undefined;
+  }
+  
+  async createCrop(crop: InsertCrop): Promise<Crop> {
+    const [newCrop] = await db.insert(crops).values(crop).returning();
+    return newCrop;
+  }
+  
+  async updateCrop(id: number, cropData: Partial<InsertCrop>): Promise<Crop | undefined> {
+    const [updatedCrop] = await db
+      .update(crops)
+      .set(cropData)
+      .where(eq(crops.id, id))
+      .returning();
+    return updatedCrop || undefined;
+  }
+  
+  async deleteCrop(id: number): Promise<boolean> {
+    const result = await db.delete(crops).where(eq(crops.id, id));
+    return result.rowCount > 0;
+  }
+  
+  // Input methods
+  async getInputs(): Promise<Input[]> {
+    return await db.select().from(inputs);
+  }
+  
+  async getInput(id: number): Promise<Input | undefined> {
+    const [input] = await db.select().from(inputs).where(eq(inputs.id, id));
+    return input || undefined;
+  }
+  
+  async createInput(input: InsertInput): Promise<Input> {
+    const [newInput] = await db.insert(inputs).values(input).returning();
+    return newInput;
+  }
+  
+  async updateInput(id: number, inputData: Partial<InsertInput>): Promise<Input | undefined> {
+    const [updatedInput] = await db
+      .update(inputs)
+      .set(inputData)
+      .where(eq(inputs.id, id))
+      .returning();
+    return updatedInput || undefined;
+  }
+  
+  async deleteInput(id: number): Promise<boolean> {
+    const result = await db.delete(inputs).where(eq(inputs.id, id));
+    return result.rowCount > 0;
+  }
+  
+  // Irrigation methods
+  async getIrrigations(farmId?: number): Promise<Irrigation[]> {
+    if (farmId) {
+      return await db.select().from(irrigations).where(eq(irrigations.farm_id, farmId));
+    }
+    return await db.select().from(irrigations);
+  }
+  
+  async getIrrigation(id: number): Promise<Irrigation | undefined> {
+    const [irrigation] = await db.select().from(irrigations).where(eq(irrigations.id, id));
+    return irrigation || undefined;
+  }
+  
+  async createIrrigation(irrigation: InsertIrrigation): Promise<Irrigation> {
+    const [newIrrigation] = await db.insert(irrigations).values(irrigation).returning();
+    return newIrrigation;
+  }
+  
+  async updateIrrigation(id: number, irrigationData: Partial<InsertIrrigation>): Promise<Irrigation | undefined> {
+    const [updatedIrrigation] = await db
+      .update(irrigations)
+      .set(irrigationData)
+      .where(eq(irrigations.id, id))
+      .returning();
+    return updatedIrrigation || undefined;
+  }
+  
+  async deleteIrrigation(id: number): Promise<boolean> {
+    const result = await db.delete(irrigations).where(eq(irrigations.id, id));
+    return result.rowCount > 0;
+  }
+  
+  // Pest methods
+  async getPests(farmId?: number): Promise<Pest[]> {
+    if (farmId) {
+      return await db.select().from(pests).where(eq(pests.farm_id, farmId));
+    }
+    return await db.select().from(pests);
+  }
+  
+  async getPest(id: number): Promise<Pest | undefined> {
+    const [pest] = await db.select().from(pests).where(eq(pests.id, id));
+    return pest || undefined;
+  }
+  
+  async createPest(pest: InsertPest): Promise<Pest> {
+    const [newPest] = await db.insert(pests).values(pest).returning();
+    return newPest;
+  }
+  
+  async updatePest(id: number, pestData: Partial<InsertPest>): Promise<Pest | undefined> {
+    const [updatedPest] = await db
+      .update(pests)
+      .set(pestData)
+      .where(eq(pests.id, id))
+      .returning();
+    return updatedPest || undefined;
+  }
+  
+  async deletePest(id: number): Promise<boolean> {
+    const result = await db.delete(pests).where(eq(pests.id, id));
+    return result.rowCount > 0;
+  }
+  
+  // Transaction methods
+  async getTransactions(farmId?: number): Promise<Transaction[]> {
+    if (farmId) {
+      return await db.select().from(transactions).where(eq(transactions.farm_id, farmId));
+    }
+    return await db.select().from(transactions);
+  }
+  
+  async getTransaction(id: number): Promise<Transaction | undefined> {
+    const [transaction] = await db.select().from(transactions).where(eq(transactions.id, id));
+    return transaction || undefined;
+  }
+  
+  async createTransaction(transaction: InsertTransaction): Promise<Transaction> {
+    const [newTransaction] = await db.insert(transactions).values(transaction).returning();
+    return newTransaction;
+  }
+  
+  async updateTransaction(id: number, transactionData: Partial<InsertTransaction>): Promise<Transaction | undefined> {
+    const [updatedTransaction] = await db
+      .update(transactions)
+      .set(transactionData)
+      .where(eq(transactions.id, id))
+      .returning();
+    return updatedTransaction || undefined;
+  }
+  
+  async deleteTransaction(id: number): Promise<boolean> {
+    const result = await db.delete(transactions).where(eq(transactions.id, id));
+    return result.rowCount > 0;
+  }
+  
+  // Activity methods
+  async getActivities(farmId?: number): Promise<Activity[]> {
+    if (farmId) {
+      return await db.select().from(activities).where(eq(activities.farm_id, farmId));
+    }
+    return await db.select().from(activities);
+  }
+  
+  async getActivity(id: number): Promise<Activity | undefined> {
+    const [activity] = await db.select().from(activities).where(eq(activities.id, id));
+    return activity || undefined;
+  }
+  
+  async createActivity(activity: InsertActivity): Promise<Activity> {
+    const [newActivity] = await db.insert(activities).values(activity).returning();
+    return newActivity;
+  }
+  
+  async updateActivity(id: number, activityData: Partial<InsertActivity>): Promise<Activity | undefined> {
+    const [updatedActivity] = await db
+      .update(activities)
+      .set(activityData)
+      .where(eq(activities.id, id))
+      .returning();
+    return updatedActivity || undefined;
+  }
+  
+  async deleteActivity(id: number): Promise<boolean> {
+    const result = await db.delete(activities).where(eq(activities.id, id));
+    return result.rowCount > 0;
+  }
+  
+  // Dashboard data
+  async getDashboardData(userId: number): Promise<any> {
+    const userFarms = await this.getFarms(userId);
+    
+    // Calculate total stats
+    const farmCount = userFarms.length;
+    
+    // Sum up cultivated area across all farms
+    const cultivatedArea = userFarms.reduce((total, farm) => {
+      return total + Number(farm.cultivated_area || 0);
+    }, 0);
+    
+    // Get unique crops across all farms
+    const activeCrops = new Set<string>();
+    userFarms.forEach(farm => {
+      if (farm.crops && Array.isArray(farm.crops)) {
+        farm.crops.forEach(crop => activeCrops.add(crop));
+      }
+    });
+    
+    // Get recent activities
+    const allActivities = await this.getActivities();
+    const sortedActivities = allActivities
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5);
+    
+    // Sample data for the demo
+    return {
+      stats: {
+        farmCount,
+        cultivatedArea,
+        activeCrops: activeCrops.size,
+        alertCount: 4 // Sample alert count
+      },
+      farms: userFarms.slice(0, 3), // Latest 3 farms
+      activities: sortedActivities,
+      // Sample data for the rest of dashboard - would be calculated from actual data in real app
+      alerts: [
+        {
+          id: 1,
+          type: "pest",
+          message: "Alerta de praga: Detecção de lagartas na Fazenda Norte",
+          location: "Fazenda Norte - Setor 2",
+          icon: "bug",
+          severity: "high"
+        },
+        {
+          id: 2,
+          type: "weather",
+          message: "Alerta de clima: Previsão de geada para os próximos 3 dias",
+          location: "Todas as fazendas",
+          icon: "cloud-snow",
+          severity: "high"
+        },
+        {
+          id: 3,
+          type: "irrigation",
+          message: "Alerta de irrigação: Baixo nível de água no reservatório",
+          location: "Fazenda Sul - Reservatório principal",
+          icon: "droplet-half",
+          severity: "medium"
+        },
+        {
+          id: 4,
+          type: "stock",
+          message: "Alerta de estoque: Fertilizante NPK está acabando",
+          location: "Estoque central",
+          icon: "package",
+          severity: "low"
+        }
+      ],
+      financialData: {
+        months: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"],
+        income: [45000, 52000, 49000, 60000, 55000, 70000],
+        expenses: [30000, 31000, 28000, 33000, 29000, 32000]
+      },
+      productionData: [
+        { crop: "Soja", percentage: 40, color: "#4CAF50" },
+        { crop: "Milho", percentage: 30, color: "#FFC107" },
+        { crop: "Trigo", percentage: 20, color: "#FF9800" },
+        { crop: "Outros", percentage: 10, color: "#2196F3" }
+      ]
+    };
+  }
+}
+
+// Exporta a classe de armazenamento de banco de dados
+export const storage = new DatabaseStorage();
