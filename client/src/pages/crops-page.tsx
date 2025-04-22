@@ -154,8 +154,8 @@ export default function CropsPage() {
     defaultValues: {
       name: "",
       variety: "",
-      cycle_days: undefined,
-      yield_per_hectare: undefined,
+      cycle_days: 0,
+      yield_per_hectare: 0,
       planting_season_start: "",
       planting_season_end: "",
     },
@@ -167,8 +167,8 @@ export default function CropsPage() {
     defaultValues: {
       name: "",
       variety: "",
-      cycle_days: undefined,
-      yield_per_hectare: undefined,
+      cycle_days: 0,
+      yield_per_hectare: 0,
       planting_season_start: "",
       planting_season_end: "",
     },
@@ -180,8 +180,8 @@ export default function CropsPage() {
     editForm.reset({
       name: crop.name,
       variety: crop.variety || "",
-      cycle_days: crop.cycle_days || undefined,
-      yield_per_hectare: crop.yield_per_hectare ? Number(crop.yield_per_hectare) : undefined,
+      cycle_days: crop.cycle_days || 0,
+      yield_per_hectare: crop.yield_per_hectare ? Number(crop.yield_per_hectare) : 0,
       planting_season_start: crop.planting_season_start || "",
       planting_season_end: crop.planting_season_end || "",
     });

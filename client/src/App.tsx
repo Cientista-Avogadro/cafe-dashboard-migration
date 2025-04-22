@@ -10,6 +10,8 @@ import AuthPage from "@/pages/auth-page";
 import DashboardPage from "@/pages/dashboard-page";
 import FarmsPage from "@/pages/farms-page";
 import CropsPage from "@/pages/crops-page";
+import SectorsPage from "@/pages/sectors-page";
+import LotsPage from "@/pages/lots-page";
 import ModulePage from "@/pages/module-page";
 
 function Router() {
@@ -19,7 +21,8 @@ function Router() {
       <ProtectedRoute path="/" component={DashboardPage} />
       <ProtectedRoute path="/fazendas" component={FarmsPage} />
       <ProtectedRoute path="/culturas" component={CropsPage} />
-      <ProtectedRoute path="/setores" component={() => <ModulePage title="Setores e Lotes" icon="ri-layout-grid-line" />} />
+      <ProtectedRoute path="/setores" component={SectorsPage} />
+      <ProtectedRoute path="/lotes" component={LotsPage} />
       <ProtectedRoute path="/producao" component={() => <ModulePage title="Produção" icon="ri-plant-line" />} />
       <ProtectedRoute path="/insumos" component={() => <ModulePage title="Insumos" icon="ri-shopping-basket-2-line" />} />
       <ProtectedRoute path="/irrigacao" component={() => <ModulePage title="Irrigação" icon="ri-drop-line" />} />
