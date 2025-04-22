@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Activity } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getStatusColor } from "@/lib/utils";
+import { getSeverityColor } from "@/lib/utils";
 
 interface RecentActivitiesProps {
   activities?: Activity[];
@@ -67,7 +67,7 @@ export default function RecentActivities({ activities, isLoading }: RecentActivi
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{activity.farm}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{activity.responsible}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge variant={getStatusColor(activity.status) as any}>{activity.status}</Badge>
+                    <Badge className={getSeverityColor(activity.status === "Concluído" ? "success" : activity.status === "Em andamento" ? "warning" : "info")}>{activity.status}</Badge>
                   </td>
                 </tr>
               ))}
