@@ -1,5 +1,106 @@
 import { gql } from 'graphql-request';
 
+// Operações de Cultura (Crop)
+export const GET_CROPS = gql`
+  query GetCrops {
+    crops {
+      id
+      name
+      variety
+      cycle_days
+      yield_per_hectare
+      planting_season_start
+      planting_season_end
+      created_at
+    }
+  }
+`;
+
+export const GET_CROP_BY_ID = gql`
+  query GetCropById($id: Int!) {
+    crops_by_pk(id: $id) {
+      id
+      name
+      variety
+      cycle_days
+      yield_per_hectare
+      planting_season_start
+      planting_season_end
+      created_at
+    }
+  }
+`;
+
+export const INSERT_CROP = gql`
+  mutation InsertCrop(
+    $name: String!,
+    $variety: String,
+    $cycle_days: Int,
+    $yield_per_hectare: numeric,
+    $planting_season_start: String,
+    $planting_season_end: String
+  ) {
+    insert_crops_one(object: {
+      name: $name,
+      variety: $variety,
+      cycle_days: $cycle_days,
+      yield_per_hectare: $yield_per_hectare,
+      planting_season_start: $planting_season_start,
+      planting_season_end: $planting_season_end
+    }) {
+      id
+      name
+      variety
+      cycle_days
+      yield_per_hectare
+      planting_season_start
+      planting_season_end
+      created_at
+    }
+  }
+`;
+
+export const UPDATE_CROP = gql`
+  mutation UpdateCrop(
+    $id: Int!,
+    $name: String,
+    $variety: String,
+    $cycle_days: Int,
+    $yield_per_hectare: numeric,
+    $planting_season_start: String,
+    $planting_season_end: String
+  ) {
+    update_crops_by_pk(
+      pk_columns: { id: $id },
+      _set: {
+        name: $name,
+        variety: $variety,
+        cycle_days: $cycle_days,
+        yield_per_hectare: $yield_per_hectare,
+        planting_season_start: $planting_season_start,
+        planting_season_end: $planting_season_end
+      }
+    ) {
+      id
+      name
+      variety
+      cycle_days
+      yield_per_hectare
+      planting_season_start
+      planting_season_end
+      created_at
+    }
+  }
+`;
+
+export const DELETE_CROP = gql`
+  mutation DeleteCrop($id: Int!) {
+    delete_crops_by_pk(id: $id) {
+      id
+    }
+  }
+`;
+
 // Operações de Usuário
 export const GET_USER_BY_ID = gql`
   query GetUserById($id: Int!) {

@@ -5,7 +5,7 @@ import Alerts from "@/components/dashboard/alerts";
 import FinancialChart from "@/components/dashboard/financial-chart";
 import ProductionChart from "@/components/dashboard/production-chart";
 import RecentActivities from "@/components/dashboard/recent-activities";
-import { HasuraStatus } from "@/components/ui/hasura-status";
+import HasuraStatus from "@/components/hasura-status";
 import { useAuth } from "@/hooks/use-auth";
 import { Farm, Alert, Activity, FinancialData, ProductionData } from "@/lib/types";
 
