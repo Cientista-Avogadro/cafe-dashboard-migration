@@ -17,6 +17,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
   const navItems = [
     { name: "Dashboard", icon: "ri-dashboard-line", path: "/" },
     { name: "Fazendas", icon: "ri-home-4-line", path: "/fazendas" },
+    { name: "Culturas", icon: "ri-seedling-line", path: "/culturas" },
     { name: "Setores e Lotes", icon: "ri-layout-grid-line", path: "/setores" },
     { name: "Produção", icon: "ri-plant-line", path: "/producao" },
     { name: "Insumos", icon: "ri-shopping-basket-2-line", path: "/insumos" },

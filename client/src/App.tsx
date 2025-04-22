@@ -9,6 +9,7 @@ import { ProtectedRoute } from "./lib/protected-route";
 import AuthPage from "@/pages/auth-page";
 import DashboardPage from "@/pages/dashboard-page";
 import FarmsPage from "@/pages/farms-page";
+import CropsPage from "@/pages/crops-page";
 import ModulePage from "@/pages/module-page";
 
 function Router() {
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/auth" component={AuthPage} />
       <ProtectedRoute path="/" component={DashboardPage} />
       <ProtectedRoute path="/fazendas" component={FarmsPage} />
+      <ProtectedRoute path="/culturas" component={CropsPage} />
       <ProtectedRoute path="/setores" component={() => <ModulePage title="Setores e Lotes" icon="ri-layout-grid-line" />} />
       <ProtectedRoute path="/producao" component={() => <ModulePage title="Produção" icon="ri-plant-line" />} />
       <ProtectedRoute path="/insumos" component={() => <ModulePage title="Insumos" icon="ri-shopping-basket-2-line" />} />
