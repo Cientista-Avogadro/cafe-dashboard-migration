@@ -1,3 +1,4 @@
+import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -27,12 +28,6 @@ export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
   const [_, setLocation] = useLocation();
 
-  // Redirect if already logged in
-  if (user) {
-    setLocation("/");
-    return null;
-  }
-
   // Login form
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -51,6 +46,13 @@ export default function AuthPage() {
       confirmPassword: "",
     },
   });
+  
+  // Este efeito lida com o redirecionamento de maneira segura
+  React.useEffect(() => {
+    if (user) {
+      setLocation("/");
+    }
+  }, [user, setLocation]);
 
   const onLoginSubmit = (values: z.infer<typeof loginSchema>) => {
     loginMutation.mutate(values);
