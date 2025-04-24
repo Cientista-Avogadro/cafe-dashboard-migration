@@ -1,239 +1,109 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { executeOperation } from "@/lib/hasura";
-import { queryClient } from "@/lib/queryClient";
 import { Sector } from "@/lib/types";
-import { GET_SECTORS, CREATE_SECTOR, UPDATE_SECTOR, DELETE_SECTOR } from "@/graphql/sector-operations";
-
-// UI Components
+import { queryClient, graphqlRequest } from "@/lib/queryClient";
+import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Card,
-  CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
+  CardDescription,
+  CardContent,
+  Button,
   Table,
-  TableBody,
-  TableCell,
-  TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
-import { Search, Plus, Edit, Trash2, Loader2 } from "lucide-react";
+  TableHead,
+  TableBody,
+  TableCell,
+  Input,
+  Skeleton,
+  Badge,
+} from "@/components/ui";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Plus, Edit, Trash2, Search, Loader2 } from "lucide-react";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 
-// Esquema para validação do formulário de setor
 const sectorSchema = z.object({
-  name: z.string().min(1, { message: "Nome é obrigatório" }),
-  description: z.string().optional(),
-  area: z.coerce.number().min(0, { message: "Área deve ser um número positivo" }),
-  farm_id: z.coerce.number().min(1, { message: "Fazenda é obrigatória" }),
+  nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
+  latitude: z.coerce.number().optional(),
+  longitude: z.coerce.number().optional(),
 });
-
 type SectorFormValues = z.infer<typeof sectorSchema>;
 
 export default function SectorsPage() {
-  const { toast } = useToast();
-  const [searchTerm, setSearchTerm] = useState("");
+  const { user } = useAuth();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [currentSector, setCurrentSector] = useState<Sector | null>(null);
-  const [selectedFarmId, setSelectedFarmId] = useState<number | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
-  // Fetch de setores
-  const { data: sectors, isLoading } = useQuery({
-    queryKey: ["/api/sectors", selectedFarmId],
+  // Query para buscar setores
+  const { data, isLoading } = useQuery<{ setores: Sector[] }>({
+    queryKey: ["setores", user?.propriedade_id],
     queryFn: async () => {
-      const result = await executeOperation<{ sectors: Sector[] }>(
-        GET_SECTORS,
-        { farmId: selectedFarmId }
-      );
-      return result.sectors;
+      if (!user?.propriedade_id) return { setores: [] };
+      return await graphqlRequest("GET_SETORES", { propriedade_id: user.propriedade_id });
     },
-  });
-
-  // Fetch de fazendas para o select
-  const { data: farms } = useQuery({
-    queryKey: ["/api/farms"],
-    queryFn: async () => {
-      const result = await executeOperation<{ farms: Array<{ id: number; name: string }> }>(
-        `query GetFarms {
-          farms {
-            id
-            name
-          }
-        }`
-      );
-      return result.farms;
-    },
+    enabled: !!user?.propriedade_id,
   });
 
   // Mutation para adicionar setor
   const addSectorMutation = useMutation({
     mutationFn: async (data: SectorFormValues) => {
-      return await executeOperation(CREATE_SECTOR, {
-        sector: data,
-      });
+      const response = await graphqlRequest("INSERT_SETOR", { ...data, propriedade_id: user?.propriedade_id });
+      return response;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sectors"] });
+      queryClient.invalidateQueries({ queryKey: ["setores", user?.propriedade_id] });
       setIsAddDialogOpen(false);
-      addForm.reset();
       toast({
         title: "Setor adicionado",
         description: "O setor foi adicionado com sucesso.",
       });
+      addForm.reset();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
-        title: "Erro ao adicionar setor",
-        description: error.message,
+        title: "Erro",
+        description: `Erro ao adicionar setor: ${error.message}`,
         variant: "destructive",
       });
     },
   });
 
-  // Mutation para atualizar setor
-  const updateSectorMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: SectorFormValues }) => {
-      return await executeOperation(UPDATE_SECTOR, {
-        id,
-        sector: data,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sectors"] });
-      setIsEditDialogOpen(false);
-      editForm.reset();
-      toast({
-        title: "Setor atualizado",
-        description: "O setor foi atualizado com sucesso.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Erro ao atualizar setor",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Mutation para excluir setor
-  const deleteSectorMutation = useMutation({
-    mutationFn: async (id: number) => {
-      return await executeOperation(DELETE_SECTOR, { id });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sectors"] });
-      toast({
-        title: "Setor excluído",
-        description: "O setor foi excluído com sucesso.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Erro ao excluir setor",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Form para adicionar setor
+  // Formulários
   const addForm = useForm<SectorFormValues>({
     resolver: zodResolver(sectorSchema),
     defaultValues: {
-      name: "",
-      description: "",
-      area: 0,
-      farm_id: 0,
+      nome: "",
+      latitude: undefined,
+      longitude: undefined,
     },
   });
 
-  // Form para editar setor
   const editForm = useForm<SectorFormValues>({
     resolver: zodResolver(sectorSchema),
     defaultValues: {
-      name: "",
-      description: "",
-      area: 0,
-      farm_id: 0,
+      nome: "",
+      latitude: undefined,
+      longitude: undefined,
     },
   });
 
-  // Função para abrir o dialog de edição
-  const handleEdit = (sector: Sector) => {
-    setCurrentSector(sector);
-    editForm.reset({
-      name: sector.name,
-      description: sector.description || "",
-      area: sector.area || 0,
-      farm_id: sector.farm_id,
-    });
-    setIsEditDialogOpen(true);
-  };
-
-  // Função para confirmar exclusão
-  const handleDelete = (id: number) => {
-    if (window.confirm("Tem certeza que deseja excluir este setor?")) {
-      deleteSectorMutation.mutate(id);
-    }
-  };
-
-  // Função para envio do formulário de adição
+  // Função de submit do formulário de adição
   const onAddSubmit = (data: SectorFormValues) => {
     addSectorMutation.mutate(data);
   };
-
-  // Função para envio do formulário de edição
-  const onEditSubmit = (data: SectorFormValues) => {
-    if (currentSector) {
-      updateSectorMutation.mutate({ id: currentSector.id, data });
-    }
-  };
-
-  // Filtrar setores com base no termo de busca
-  const filteredSectors = sectors?.filter((sector) =>
-    sector.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (sector.description && sector.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (sector.farm?.name && sector.farm.name.toLowerCase().includes(searchTerm.toLowerCase()))
+  // Filtro de busca
+  const filteredSectors = data?.setores?.filter((setor) =>
+    setor.nome.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Renderização de estado de carregamento
+  // Loading
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -263,97 +133,104 @@ export default function SectorsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Gestão de Setores</h1>
-          <p className="text-slate-500">
-            Cadastre e gerencie os setores das suas fazendas
-          </p>
+          <p className="text-slate-500">Cadastre e gerencie os setores da sua propriedade</p>
         </div>
-        
-        <Button onClick={() => setIsAddDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Novo Setor
-        </Button>
+        <div className="flex gap-2 items-center">
+          <Button
+            variant={viewMode === 'table' ? 'default' : 'secondary'}
+            onClick={() => setViewMode('table')}
+            className="ri-list-check hover:bg-brown-200"
+          >
+          </Button>
+          <Button
+            variant={viewMode === 'cards' ? 'default' : 'secondary'}
+            onClick={() => setViewMode('cards')}
+            className="ri-grid-line"
+          >
+          </Button>
+          <Button onClick={() => setIsAddDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novo Setor
+          </Button>
+        </div>
       </div>
-
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle>Setores Cadastrados</CardTitle>
-              <CardDescription>
-                Lista de setores disponíveis no sistema
-              </CardDescription>
+              <CardDescription>Lista de setores cadastrados na sua propriedade</CardDescription>
             </div>
-            <div className="flex items-center gap-4">
-              <Select
-                value={selectedFarmId?.toString() || ""}
-                onValueChange={(value) => setSelectedFarmId(value ? Number(value) : null)}
-              >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Todas as fazendas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Todas as fazendas</SelectItem>
-                  {farms?.map((farm) => (
-                    <SelectItem key={farm.id} value={farm.id.toString()}>
-                      {farm.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Buscar setores..."
-                  className="pl-8"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Buscar setores..."
+                className="pl-8"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
           </div>
         </CardHeader>
         <CardContent>
           {filteredSectors && filteredSectors.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Fazenda</TableHead>
-                  <TableHead>Área (ha)</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredSectors.map((sector) => (
-                  <TableRow key={sector.id}>
-                    <TableCell className="font-medium">{sector.name}</TableCell>
-                    <TableCell>{sector.farm?.name || "-"}</TableCell>
-                    <TableCell>{sector.area ? `${Number(sector.area).toFixed(2)}` : "-"}</TableCell>
-                    <TableCell className="max-w-md truncate">{sector.description || "-"}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(sector)}
-                        >
-                          <Edit className="h-4 w-4" />
+            viewMode === 'table' ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Latitude</TableHead>
+                    <TableHead>Longitude</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredSectors.map((setor) => (
+                    <TableRow key={setor.id}>
+                      <TableCell className="font-medium">{setor.nome}</TableCell>
+                      <TableCell>{setor.latitude ?? "-"}</TableCell>
+                      <TableCell>{setor.longitude ?? "-"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredSectors.map((setor) => (
+                  <Card key={setor.id} className="overflow-hidden">
+                    <div className="relative h-40 farm-card-image">
+                      <img
+                        src="https://images.unsplash.com/photo-1464226184884-fa280b87c399?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60"
+                        alt={setor.nome}
+                        className="h-full w-full object-cover"
+                      />
+                      <div className="farm-card-image-overlay">
+                        <div className="absolute bottom-3 left-3">
+                          <Badge variant="default">Ativo</Badge>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-4">
+                      <h3 className="text-lg font-semibold text-slate-900 mb-1">{setor.nome}</h3>
+                      <p className="text-sm text-slate-500 mb-4">
+                        {setor.latitude && setor.longitude
+                          ? `Lat: ${setor.latitude}, Long: ${setor.longitude}`
+                          : "Sem localização"}
+                      </p>
+                      {/* Campos extras podem ser adicionados aqui */}
+                      <div className="flex space-x-2">
+                        <Button variant="outline" className="flex-1">
+                          <i className="ri-eye-line mr-1"></i> Detalhes
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(sector.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-500" />
+                        <Button variant="secondary" className="flex-1">
+                          <i className="ri-edit-line mr-1"></i> Editar
                         </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
+                    </div>
+                  </Card>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            )
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               {searchTerm ? "Nenhum setor encontrado para esta busca." : "Nenhum setor cadastrado."}
@@ -361,94 +238,58 @@ export default function SectorsPage() {
           )}
         </CardContent>
       </Card>
-
       {/* Dialog de adicionar setor */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Adicionar Novo Setor</DialogTitle>
-            <DialogDescription>
-              Preencha os detalhes do setor a ser adicionado.
-            </DialogDescription>
+            <DialogDescription>Preencha os detalhes do setor a ser adicionado.</DialogDescription>
           </DialogHeader>
           <Form {...addForm}>
             <form onSubmit={addForm.handleSubmit(onAddSubmit)} className="space-y-4">
               <FormField
                 control={addForm.control}
-                name="farm_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fazenda*</FormLabel>
-                    <Select
-                      onValueChange={(value) => field.onChange(Number(value))}
-                      value={field.value ? field.value.toString() : ""}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma fazenda" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {farms?.map((farm) => (
-                          <SelectItem key={farm.id} value={farm.id.toString()}>
-                            {farm.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={addForm.control}
-                name="name"
+                name="nome"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Nome do Setor*</FormLabel>
                     <FormControl>
-                      <Input placeholder="Ex: Setor Norte" {...field} />
+                      <Input placeholder="Ex: Setor 1" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
-                control={addForm.control}
-                name="area"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Área (hectares)</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.01" placeholder="Ex: 5.5" {...field} />
-                    </FormControl>
-                    <FormDescription>Área em hectares</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={addForm.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrição</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Ex: Setor com plantio de milho"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={addForm.control}
+                  name="latitude"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Latitude</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="any" placeholder="Ex: -23.5505" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={addForm.control}
+                  name="longitude"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Longitude</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="any" placeholder="Ex: -46.6333" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsAddDialogOpen(false)}
-                >
+                <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                   Cancelar
                 </Button>
                 <Button type="submit" disabled={addSectorMutation.isPending}>
@@ -463,106 +304,6 @@ export default function SectorsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de editar setor */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Editar Setor</DialogTitle>
-            <DialogDescription>
-              Atualize as informações do setor.
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...editForm}>
-            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
-              <FormField
-                control={editForm.control}
-                name="farm_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fazenda*</FormLabel>
-                    <Select
-                      onValueChange={(value) => field.onChange(Number(value))}
-                      value={field.value ? field.value.toString() : ""}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma fazenda" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {farms?.map((farm) => (
-                          <SelectItem key={farm.id} value={farm.id.toString()}>
-                            {farm.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome do Setor*</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Setor Norte" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="area"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Área (hectares)</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.01" placeholder="Ex: 5.5" {...field} />
-                    </FormControl>
-                    <FormDescription>Área em hectares</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrição</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Ex: Setor com plantio de milho"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsEditDialogOpen(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={updateSectorMutation.isPending}>
-                  {updateSectorMutation.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Salvar Alterações
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

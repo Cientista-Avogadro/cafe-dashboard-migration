@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { User } from '@shared/schema';
+import type { PublicUser } from '@/hooks/use-auth';
 import { useAuth } from '@/hooks/use-auth';
 import { Link } from 'wouter';
 
 interface HeaderProps {
   setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  user: User;
+  user: PublicUser;
 }
 
 export default function Header({ setSidebarOpen, user }: HeaderProps) {
@@ -32,7 +32,7 @@ export default function Header({ setSidebarOpen, user }: HeaderProps) {
           className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white"
         >
           <span className="text-sm font-medium">
-            {user?.username?.substring(0, 2).toUpperCase()}
+            {(user?.nome || user?.email || '').substring(0, 2).toUpperCase()}
           </span>
         </button>
       </div>

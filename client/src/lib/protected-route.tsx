@@ -4,7 +4,7 @@ import { Route, useLocation } from "wouter";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import MobileNavigation from "@/components/layout/mobile-navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function ProtectedRoute({
   path,
@@ -18,6 +18,13 @@ export function ProtectedRoute({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Redirect to /auth if not authenticated (useEffect avoids setState during render)
+  useEffect(() => {
+    if (!isLoading && !user) {
+      setLocation("/auth");
+    }
+  }, [user, isLoading, setLocation]);
+
   if (isLoading) {
     return (
       <Route path={path}>
@@ -29,7 +36,6 @@ export function ProtectedRoute({
   }
 
   if (!user) {
-    setLocation("/auth");
     return null;
   }
 

@@ -1,14 +1,12 @@
-// Farm type
-export interface Farm {
-  id: number;
-  name: string;
-  location: string;
-  area: number;
-  cultivated_area: number;
-  crops: string[];
-  employees: number;
-  status: string;
-  image: string;
+// Propriedade type
+export interface Propriedade {
+  id: string; // UUID
+  nome: string;
+  localizacao?: string;
+  tamanho?: number;
+  nif?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 // Alert type
@@ -24,11 +22,10 @@ export interface Alert {
 // Activity type
 export interface Activity {
   id: number;
-  date: string;
-  activity: string;
-  farm: string;
-  responsible: string;
-  status: string;
+  data_prevista: string;
+  tipo: string;
+  planejamento_id: string;
+  observacoes?: string;
 }
 
 // Financial data type
@@ -47,89 +44,77 @@ export interface ProductionData {
 
 // Sector type
 export interface Sector {
-  id: number;
-  name: string;
-  farm_id: number;
-  farm_name: string;
-  area: number;
-  current_crop: string;
-  status: string;
+  id: string; // UUID
+  nome: string;
+  propriedade_id: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 // Lot type
 export interface Lot {
-  id: number;
-  name: string;
-  sector_id: number;
-  sector_name: string;
-  area: number;
-  current_crop: string;
-  planting_date: string;
-  expected_harvest_date: string;
-  status: string;
+  id: string; // UUID
+  nome: string;
+  setor_id: string;
+  cultura_atual?: string;
+  status?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 // Crop type
 export interface Crop {
-  id: number;
-  name: string;
-  variety: string;
-  cycle_days: number;
-  yield_per_hectare: number;
-  planting_season_start: string;
-  planting_season_end: string;
+  id: string; // UUID
+  nome: string;
+  ciclo_estimado_dias?: number;
 }
 
-// Input type
-export interface Input {
-  id: number;
-  name: string;
-  type: string;
-  unit: string;
-  stock: number;
-  price_per_unit: number;
-  supplier: string;
-  last_purchase_date: string;
+// ProductStock type
+export interface ProductStock {
+  id: string; // UUID
+  nome: string;
+  categoria?: string;
+  unidade?: string;
+  quantidade?: number;
+  propriedade_id: string;
+}
+
+// StockMovement type
+export interface StockMovement {
+  id: string; // UUID
+  produto_id: string;
+  tipo: 'entrada' | 'saida';
+  quantidade: number;
+  data: string;
+  descricao?: string;
 }
 
 // Irrigation type
 export interface Irrigation {
-  id: number;
-  date: string;
-  farm_id: number;
-  farm_name: string;
-  sector_id: number;
-  sector_name: string;
-  volume: number;
-  duration: number;
-  responsible: string;
-  notes: string;
+  id: string; // UUID
+  lote_id: string;
+  data: string;
+  volume_agua: number;
+  metodo: string;
 }
 
 // Pest type
 export interface Pest {
-  id: number;
-  name: string;
-  affected_crops: string[];
-  detection_date: string;
-  status: string;
-  severity: string;
-  treatment: string;
-  farm_id: number;
-  farm_name: string;
-  sector_id: number;
-  sector_name: string;
+  id: string; // UUID
+  lote_id: string;
+  data: string;
+  tipo_praga: string;
+  metodo_controle: string;
+  resultado: string;
 }
 
 // Transaction type
 export interface Transaction {
-  id: number;
-  date: string;
-  type: string;
-  category: string;
-  amount: number;
-  description: string;
-  farm_id: number;
-  farm_name: string;
-  payment_method: string;
+  id: string; // UUID
+  propriedade_id: string;
+  tipo: 'entrada' | 'saida';
+  valor: number;
+  descricao?: string;
+  data: string;
+  categoria?: string;
 }

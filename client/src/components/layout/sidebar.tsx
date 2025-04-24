@@ -16,9 +16,9 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
   // Generate the navigation items for both desktop and mobile
   const navItems = [
     { name: "Dashboard", icon: "ri-dashboard-line", path: "/" },
-    { name: "Fazendas", icon: "ri-home-4-line", path: "/fazendas" },
     { name: "Culturas", icon: "ri-seedling-line", path: "/culturas" },
-    { name: "Setores e Lotes", icon: "ri-layout-grid-line", path: "/setores" },
+    { name: "Setores", icon: "ri-layout-grid-line", path: "/setores" },
+    { name: "Lotes", icon: "ri-home-line", path: "/lotes" },
     { name: "Produção", icon: "ri-plant-line", path: "/producao" },
     { name: "Insumos", icon: "ri-shopping-basket-2-line", path: "/insumos" },
     { name: "Irrigação", icon: "ri-drop-line", path: "/irrigacao" },
@@ -58,11 +58,11 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
               <div className="flex items-center">
                 <div>
                   <div className="h-9 w-9 rounded-full bg-primary flex items-center justify-center text-white">
-                    <span className="text-sm font-medium">{user?.username?.substring(0, 2).toUpperCase()}</span>
+                    <span className="text-sm font-medium">{((user?.nome || user?.email || "").substring(0, 2)).toUpperCase()}</span>
                   </div>
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-slate-700">{user?.username}</p>
+                  <p className="text-sm font-medium text-slate-700">{user?.nome || user?.email}</p>
                   <p className="text-xs font-medium text-slate-500 group-hover:text-slate-700">
                     {user?.role || "Usuário"}
                   </p>
@@ -123,11 +123,11 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
                 <div className="flex items-center">
                   <div>
                     <div className="h-9 w-9 rounded-full bg-primary flex items-center justify-center text-white">
-                      <span className="text-sm font-medium">{user?.username?.substring(0, 2).toUpperCase()}</span>
+                      <span className="text-sm font-medium">{((user?.nome || user?.email || "").substring(0, 2)).toUpperCase()}</span>
                     </div>
                   </div>
                   <div className="ml-3">
-                    <p className="text-sm font-medium text-slate-700">{user?.username}</p>
+                    <p className="text-sm font-medium text-slate-700">{user?.nome || user?.email}</p>
                     <p className="text-xs font-medium text-slate-500 group-hover:text-slate-700">
                       {user?.role || "Usuário"}
                     </p>

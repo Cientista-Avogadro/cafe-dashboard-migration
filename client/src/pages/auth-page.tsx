@@ -10,29 +10,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { insertUserSchema } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
+import { graphqlRequest } from "@/lib/queryClient";
 
 // Extend the schema with validation
-const loginSchema = insertUserSchema.extend({
-  username: z.string().min(3, { message: "Nome de usuário deve ter pelo menos 3 caracteres" }),
+const loginSchema = z.object({
+  email: z.string().email({ message: "Email inválido" }),
   password: z.string().min(6, { message: "Senha deve ter pelo menos 6 caracteres" }),
 });
 
-const registerSchema = loginSchema.extend({
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "As senhas não coincidem",
-  path: ["confirmPassword"],
-});
+import { registerSchema } from "@shared/register-schema";
 
 export default function AuthPage() {
-  const { user, loginMutation, registerMutation } = useAuth();
+  const { user, loginMutation, registerWithProperty } = useAuth();
   const [_, setLocation] = useLocation();
+
 
   // Login form
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: "",
+      email: "",
       password: "",
     },
   });
@@ -41,7 +38,8 @@ export default function AuthPage() {
   const registerForm = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
-      username: "",
+      nome: "",
+      email: "",
       password: "",
       confirmPassword: "",
     },
@@ -55,13 +53,22 @@ export default function AuthPage() {
   }, [user, setLocation]);
 
   const onLoginSubmit = (values: z.infer<typeof loginSchema>) => {
+    // Envia email e password
     loginMutation.mutate(values);
   };
 
   const onRegisterSubmit = (values: z.infer<typeof registerSchema>) => {
-    const { confirmPassword, ...userData } = values;
-    registerMutation.mutate(userData);
+    registerWithProperty.mutate(values, {
+      onSuccess: () => {
+        setLocation("/");
+      },
+      onError: (error) => {
+        console.error(error);
+      },
+    });
   };
+
+
 
   return (
     <div className="min-h-screen grid md:grid-cols-2 bg-slate-50">
@@ -90,12 +97,12 @@ export default function AuthPage() {
                   <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
                     <FormField
                       control={loginForm.control}
-                      name="username"
+                      name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Nome de Usuário</FormLabel>
+                          <FormLabel>Email</FormLabel>
                           <FormControl>
-                            <Input placeholder="Digite seu usuário" {...field} />
+                            <Input placeholder="Digite seu email" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -128,52 +135,114 @@ export default function AuthPage() {
               {/* Register Tab */}
               <TabsContent value="register">
                 <Form {...registerForm}>
-                  <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-4">
-                    <FormField
-                      control={registerForm.control}
-                      name="username"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Nome de Usuário</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Escolha um nome de usuário" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={registerForm.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Senha</FormLabel>
-                          <FormControl>
-                            <Input type="password" placeholder="Crie uma senha" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={registerForm.control}
-                      name="confirmPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Confirmar Senha</FormLabel>
-                          <FormControl>
-                            <Input type="password" placeholder="Confirme sua senha" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  
+                  <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-6">
+                    {/* Dados do Usuário */}
+                    <div>
+  <h3 className="text-lg font-semibold mb-2">Dados do Usuário</h3>
+                      <FormField
+                        control={registerForm.control}
+                        name="nome"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nome</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Digite seu nome" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={registerForm.control}
+                        name="email"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Email</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Escolha um email" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={registerForm.control}
+                        name="password"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Senha</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="Crie uma senha" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={registerForm.control}
+                        name="confirmPassword"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Confirme a Senha</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="Confirme sua senha" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    {/* Dados da Propriedade */}
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2">Dados da Propriedade</h3>
+                      <FormField
+                        control={registerForm.control}
+                        name="propriedade_nome"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nome da Propriedade</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Digite o nome da propriedade" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={registerForm.control}
+                        name="propriedade_localizacao"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Localização</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Digite a localização (opcional)" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={registerForm.control}
+                        name="propriedade_tamanho"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Tamanho (ha)</FormLabel>
+                            <FormControl>
+                              <Input type="number" placeholder="Digite o tamanho em hectares (opcional)" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                     <Button 
                       type="submit" 
                       className="w-full"
-                      disabled={registerMutation.isPending}
+                      disabled={registerWithProperty.isPending}
                     >
-                      {registerMutation.isPending ? "Criando conta..." : "Criar Conta"}
+                      {registerWithProperty.isPending ? "Criando conta..." : "Criar Conta"}
                     </Button>
                   </form>
                 </Form>

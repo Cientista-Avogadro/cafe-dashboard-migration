@@ -8,18 +8,18 @@ import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "./lib/protected-route";
 import AuthPage from "@/pages/auth-page";
 import DashboardPage from "@/pages/dashboard-page";
-import FarmsPage from "@/pages/farms-page";
+
 import CropsPage from "@/pages/crops-page";
 import SectorsPage from "@/pages/sectors-page";
-import LotsPage from "@/pages/lots-page";
 import ModulePage from "@/pages/module-page";
+import LotsPage from "./pages/lots-page";
 
 function Router() {
   return (
     <Switch>
       <Route path="/auth" component={AuthPage} />
       <ProtectedRoute path="/" component={DashboardPage} />
-      <ProtectedRoute path="/fazendas" component={FarmsPage} />
+
       <ProtectedRoute path="/culturas" component={CropsPage} />
       <ProtectedRoute path="/setores" component={SectorsPage} />
       <ProtectedRoute path="/lotes" component={LotsPage} />
