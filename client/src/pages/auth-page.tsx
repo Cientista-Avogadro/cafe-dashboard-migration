@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { insertUserSchema } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { graphqlRequest } from "@/lib/queryClient";
@@ -44,7 +43,7 @@ export default function AuthPage() {
       confirmPassword: "",
     },
   });
-  
+
   // Este efeito lida com o redirecionamento de maneira segura
   React.useEffect(() => {
     if (user) {
@@ -68,13 +67,11 @@ export default function AuthPage() {
     });
   };
 
-
-
   return (
-    <div className="min-h-screen grid md:grid-cols-2 bg-slate-50">
+    <div className="min-h-screen grid bg-[url('src/assets/auth-img.png')] bg-cover bg-center bg-no-repeat overflow-hidden " style={{ backgroundSize: "100% 100%" }}>
       {/* Left column with forms */}
       <div className="flex items-center justify-center p-4 md:p-8">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md shadow-lg rounded-lg border-0 ">
           <CardHeader className="space-y-1">
             <div className="flex justify-center mb-4">
               <span className="text-3xl font-bold text-primary">AgroGestão</span>
@@ -90,11 +87,11 @@ export default function AuthPage() {
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="register">Criar Conta</TabsTrigger>
               </TabsList>
-              
+
               {/* Login Tab */}
               <TabsContent value="login">
                 <Form {...loginForm}>
-                  <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
+                  <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4 ">
                     <FormField
                       control={loginForm.control}
                       name="email"
@@ -121,8 +118,8 @@ export default function AuthPage() {
                         </FormItem>
                       )}
                     />
-                    <Button 
-                      type="submit" 
+                    <Button
+                      type="submit"
                       className="w-full"
                       disabled={loginMutation.isPending}
                     >
@@ -131,15 +128,15 @@ export default function AuthPage() {
                   </form>
                 </Form>
               </TabsContent>
-              
+
               {/* Register Tab */}
-              <TabsContent value="register">
+              <TabsContent value="register" >
                 <Form {...registerForm}>
-                  
-                  <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-6">
+
+                  <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-6 relative overflow-y-scroll max-h-[300px] p-4 ">
                     {/* Dados do Usuário */}
                     <div>
-  <h3 className="text-lg font-semibold mb-2">Dados do Usuário</h3>
+                      <h3 className="text-lg font-semibold mb-2">Dados do Usuário</h3>
                       <FormField
                         control={registerForm.control}
                         name="nome"
@@ -237,8 +234,8 @@ export default function AuthPage() {
                         )}
                       />
                     </div>
-                    <Button 
-                      type="submit" 
+                    <Button
+                      type="submit"
                       className="w-full"
                       disabled={registerWithProperty.isPending}
                     >
@@ -250,48 +247,6 @@ export default function AuthPage() {
             </Tabs>
           </CardContent>
         </Card>
-      </div>
-      
-      {/* Right column with hero section */}
-      <div className="hidden md:flex items-center justify-center p-8 bg-primary-light bg-gradient-to-br from-primary to-primary-dark text-white">
-        <div className="max-w-md space-y-6">
-          <h1 className="text-4xl font-bold">AgroGestão</h1>
-          <h2 className="text-2xl font-medium">Sistema Completo de Gestão Agrícola</h2>
-          <p className="text-lg opacity-90">
-            Controle completo das suas propriedades rurais, produções, 
-            insumos e finanças em uma única plataforma.
-          </p>
-          <div className="grid grid-cols-2 gap-4 pt-4">
-            <div className="flex items-start space-x-2">
-              <i className="ri-plant-line text-2xl"></i>
-              <div>
-                <h3 className="font-bold">Gestão de Produção</h3>
-                <p className="text-sm opacity-80">Planeje e acompanhe todas as suas culturas</p>
-              </div>
-            </div>
-            <div className="flex items-start space-x-2">
-              <i className="ri-money-dollar-circle-line text-2xl"></i>
-              <div>
-                <h3 className="font-bold">Controle Financeiro</h3>
-                <p className="text-sm opacity-80">Monitore receitas, custos e lucratividade</p>
-              </div>
-            </div>
-            <div className="flex items-start space-x-2">
-              <i className="ri-store-2-line text-2xl"></i>
-              <div>
-                <h3 className="font-bold">Gestão de Insumos</h3>
-                <p className="text-sm opacity-80">Controle seu estoque e uso de recursos</p>
-              </div>
-            </div>
-            <div className="flex items-start space-x-2">
-              <i className="ri-bar-chart-2-line text-2xl"></i>
-              <div>
-                <h3 className="font-bold">Relatórios</h3>
-                <p className="text-sm opacity-80">Dados e análises para melhores decisões</p>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
