@@ -28,7 +28,7 @@ import { getQueryFn, queryClient, graphqlRequest } from "@/lib/queryClient";
 import { GET_USER_BY_EMAIL, INSERT_USER } from "@/graphql/operations";
 import { z } from "zod";
 import { insertUserSchema } from "@shared/schema";
-import { registerSchema } from "@shared/register-schema";
+import { registerSchema } from "@/schemas/register-schema";
 
 import { useToast } from "@/hooks/use-toast";
 

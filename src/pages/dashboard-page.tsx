@@ -146,7 +146,7 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
           <p className="text-slate-500">
             Visão geral da sua operação agrícola
-            {user ? `, ${user.username}` : ''}
+            {user ? `, ${user.nome}` : ''}
           </p>
         </div>
         <div className="mt-2 md:mt-0">

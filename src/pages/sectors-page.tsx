@@ -54,7 +54,12 @@ export default function SectorsPage() {
   // Mutation para adicionar setor
   const addSectorMutation = useMutation({
     mutationFn: async (data: SectorFormValues) => {
-      const response = await graphqlRequest("INSERT_SETOR", { ...data, propriedade_id: user?.propriedade_id });
+      const response = await graphqlRequest("INSERT_SETOR", {
+        setor: {
+          ...data,
+          propriedade_id: user?.propriedade_id,
+        },
+      });
       return response;
     },
     onSuccess: () => {

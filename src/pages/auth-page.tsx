@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { graphqlRequest } from "@/lib/queryClient";
+import { registerSchema } from "@/schemas/register-schema";
 
 // Extend the schema with validation
 const loginSchema = z.object({
@@ -17,7 +18,6 @@ const loginSchema = z.object({
   password: z.string().min(6, { message: "Senha deve ter pelo menos 6 caracteres" }),
 });
 
-import { registerSchema } from "@shared/register-schema";
 
 export default function AuthPage() {
   const { user, loginMutation, registerWithProperty } = useAuth();
@@ -68,7 +68,7 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen grid bg-[url('src/assets/auth-img.png')] bg-cover bg-center bg-no-repeat overflow-hidden " style={{ backgroundSize: "100% 100%" }}>
+    <div className="min-h-screen grid bg-[url('assets/auth-img.png')] bg-cover bg-center bg-no-repeat overflow-hidden " style={{ backgroundSize: "100% 100%" }}>
       {/* Left column with forms */}
       <div className="flex items-center justify-center p-4 md:p-8">
         <Card className="w-full max-w-md shadow-lg rounded-lg border-0 ">
