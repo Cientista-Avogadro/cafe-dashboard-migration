@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Crop } from "@shared/schema";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { Crop } from "@/lib/types";
+import { graphqlRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -57,12 +58,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 // Esquema de validação para cultura
 const cropSchema = z.object({
-  name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
-  variety: z.string().optional(),
-  cycle_days: z.coerce.number().min(1, "Deve ser pelo menos 1").optional(),
-  yield_per_hectare: z.coerce.number().min(0, "Deve ser um valor positivo").optional(),
-  planting_season_start: z.string().optional(),
-  planting_season_end: z.string().optional(),
+  nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
+  variedade: z.string().optional(),
+  ciclo_estimado_dias: z.coerce.number().min(1, "Deve ser pelo menos 1").optional(),
+  produtividade: z.coerce.number().min(0, "Deve ser um valor positivo").optional(),
+  inicio_epoca_plantio: z.string().optional(),
+  fim_epoca_plantio: z.string().optional(),
 });
 
 type CropFormValues = z.infer<typeof cropSchema>;
@@ -75,19 +76,23 @@ export default function CropsPage() {
   const [searchTerm, setSearchTerm] = useState("");
 
   // Query para buscar culturas
-  const { data: crops, isLoading } = useQuery<Crop[]>({
-    queryKey: ["/api/crops"],
+  const { data: culturas, isLoading } = useQuery<{ culturas: Crop[] }>({
+    queryKey: ["culturas"],
+    queryFn: async () => {
+      return await graphqlRequest("GET_CULTURAS");
+    },
     enabled: !!user,
   });
+  
+  const crops = culturas?.culturas || [];
 
   // Mutation para adicionar cultura
   const addCropMutation = useMutation({
     mutationFn: async (data: CropFormValues) => {
-      const response = await apiRequest("POST", "/api/crops", data);
-      return response.json();
+      return await graphqlRequest("INSERT_CULTURA", { cultura: data });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/crops"] });
+      queryClient.invalidateQueries({ queryKey: ["culturas"] });
       setIsAddDialogOpen(false);
       toast({
         title: "Cultura adicionada",
@@ -106,12 +111,11 @@ export default function CropsPage() {
 
   // Mutation para atualizar cultura
   const updateCropMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: CropFormValues }) => {
-      const response = await apiRequest("PATCH", `/api/crops/${id}`, data);
-      return response.json();
+    mutationFn: async ({ id, data }: { id: string; data: CropFormValues }) => {
+      return await graphqlRequest("UPDATE_CULTURA", { id, cultura: data });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/crops"] });
+      queryClient.invalidateQueries({ queryKey: ["culturas"] });
       setIsEditDialogOpen(false);
       toast({
         title: "Cultura atualizada",
@@ -129,11 +133,11 @@ export default function CropsPage() {
 
   // Mutation para excluir cultura
   const deleteCropMutation = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/crops/${id}`);
+    mutationFn: async (id: string) => {
+      await graphqlRequest("DELETE_CULTURA", { id });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/crops"] });
+      queryClient.invalidateQueries({ queryKey: ["culturas"] });
       toast({
         title: "Cultura excluída",
         description: "A cultura foi excluída com sucesso.",
@@ -152,12 +156,12 @@ export default function CropsPage() {
   const addForm = useForm<CropFormValues>({
     resolver: zodResolver(cropSchema),
     defaultValues: {
-      name: "",
-      variety: "",
-      cycle_days: 0,
-      yield_per_hectare: 0,
-      planting_season_start: "",
-      planting_season_end: "",
+      nome: "",
+      variedade: "",
+      ciclo_estimado_dias: 0,
+      produtividade: 0,
+      inicio_epoca_plantio: "",
+      fim_epoca_plantio: "",
     },
   });
 
@@ -165,31 +169,32 @@ export default function CropsPage() {
   const editForm = useForm<CropFormValues>({
     resolver: zodResolver(cropSchema),
     defaultValues: {
-      name: "",
-      variety: "",
-      cycle_days: 0,
-      yield_per_hectare: 0,
-      planting_season_start: "",
-      planting_season_end: "",
+      nome: "",
+      variedade: "",
+      ciclo_estimado_dias: 0,
+      produtividade: 0,
+      inicio_epoca_plantio: "",
+      fim_epoca_plantio: "",
     },
   });
 
   // Função para abrir o dialog de edição
   const handleEdit = (crop: Crop) => {
     setCurrentCrop(crop);
+    console.log(crop)
     editForm.reset({
-      name: crop.name,
-      variety: crop.variety || "",
-      cycle_days: crop.cycle_days || 0,
-      yield_per_hectare: crop.yield_per_hectare ? Number(crop.yield_per_hectare) : 0,
-      planting_season_start: crop.planting_season_start || "",
-      planting_season_end: crop.planting_season_end || "",
+      nome: crop.nome,
+      variedade: crop.variedade || "",
+      ciclo_estimado_dias: crop.ciclo_estimado_dias || 0,
+      produtividade: crop.produtividade ? Number(crop.produtividade) : 0,
+      inicio_epoca_plantio: crop.inicio_epoca_plantio || "",
+      fim_epoca_plantio: crop.fim_epoca_plantio || "",
     });
     setIsEditDialogOpen(true);
   };
 
   // Função para confirmar exclusão
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: string) => {
     if (window.confirm("Tem certeza que deseja excluir esta cultura?")) {
       deleteCropMutation.mutate(id);
     }
@@ -204,13 +209,13 @@ export default function CropsPage() {
   const onEditSubmit = (data: CropFormValues) => {
     if (currentCrop) {
       updateCropMutation.mutate({ id: currentCrop.id, data });
-    }
+    }+3
   };
 
   // Filtrar culturas com base no termo de busca
   const filteredCrops = crops?.filter((crop) =>
-    crop.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (crop.variety && crop.variety.toLowerCase().includes(searchTerm.toLowerCase()))
+    crop.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (crop.variedade && crop.variedade.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   // Renderização de estado de carregamento
@@ -291,13 +296,13 @@ export default function CropsPage() {
               <TableBody>
                 {filteredCrops.map((crop) => (
                   <TableRow key={crop.id}>
-                    <TableCell className="font-medium">{crop.name}</TableCell>
-                    <TableCell>{crop.variety || "-"}</TableCell>
-                    <TableCell>{crop.cycle_days || "-"}</TableCell>
-                    <TableCell>{crop.yield_per_hectare ? `${Number(crop.yield_per_hectare).toFixed(2)}` : "-"}</TableCell>
+                    <TableCell className="font-medium">{crop.nome}</TableCell>
+                    <TableCell>{crop.variedade || "-"}</TableCell>
+                    <TableCell>{crop.ciclo_estimado_dias || "-"}</TableCell>
+                    <TableCell>{crop.produtividade ? `${Number(crop.produtividade).toFixed(2)}` : "-"}</TableCell>
                     <TableCell>
-                      {crop.planting_season_start && crop.planting_season_end
-                        ? `${crop.planting_season_start} a ${crop.planting_season_end}`
+                      {crop.inicio_epoca_plantio && crop.fim_epoca_plantio
+                        ? `${crop.inicio_epoca_plantio} a ${crop.fim_epoca_plantio}`
                         : "-"}
                     </TableCell>
                     <TableCell className="text-right">
@@ -312,7 +317,7 @@ export default function CropsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDelete(crop.id)}
+                          onClick={() => handleDelete(String(crop.id))}
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
@@ -343,7 +348,7 @@ export default function CropsPage() {
             <form onSubmit={addForm.handleSubmit(onAddSubmit)} className="space-y-4">
               <FormField
                 control={addForm.control}
-                name="name"
+                name="nome"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Nome da Cultura*</FormLabel>
@@ -356,7 +361,7 @@ export default function CropsPage() {
               />
               <FormField
                 control={addForm.control}
-                name="variety"
+                name="variedade"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Variedade</FormLabel>
@@ -370,7 +375,7 @@ export default function CropsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={addForm.control}
-                  name="cycle_days"
+                  name="ciclo_estimado_dias"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Ciclo (dias)</FormLabel>
@@ -383,7 +388,7 @@ export default function CropsPage() {
                 />
                 <FormField
                   control={addForm.control}
-                  name="yield_per_hectare"
+                  name="produtividade"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Produtividade (t/ha)</FormLabel>
@@ -398,12 +403,12 @@ export default function CropsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={addForm.control}
-                  name="planting_season_start"
+                  name="inicio_epoca_plantio"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Início da Época de Plantio</FormLabel>
+                      <FormLabel>Início Época de Plantio</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ex: Setembro" {...field} />
+                        <Input placeholder="Ex: Março" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -411,12 +416,12 @@ export default function CropsPage() {
                 />
                 <FormField
                   control={addForm.control}
-                  name="planting_season_end"
+                  name="fim_epoca_plantio"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Fim da Época de Plantio</FormLabel>
+                      <FormLabel>Fim Época de Plantio</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ex: Novembro" {...field} />
+                        <Input placeholder="Ex: Maio" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -456,7 +461,7 @@ export default function CropsPage() {
             <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
               <FormField
                 control={editForm.control}
-                name="name"
+                name="nome"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Nome da Cultura*</FormLabel>
@@ -469,7 +474,7 @@ export default function CropsPage() {
               />
               <FormField
                 control={editForm.control}
-                name="variety"
+                name="variedade"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Variedade</FormLabel>
@@ -483,7 +488,7 @@ export default function CropsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={editForm.control}
-                  name="cycle_days"
+                  name="ciclo_estimado_dias"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Ciclo (dias)</FormLabel>
@@ -496,7 +501,7 @@ export default function CropsPage() {
                 />
                 <FormField
                   control={editForm.control}
-                  name="yield_per_hectare"
+                  name="produtividade"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Produtividade (t/ha)</FormLabel>
@@ -511,12 +516,12 @@ export default function CropsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={editForm.control}
-                  name="planting_season_start"
+                  name="inicio_epoca_plantio"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Início da Época de Plantio</FormLabel>
+                      <FormLabel>Início Época de Plantio</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ex: Setembro" {...field} />
+                        <Input placeholder="Ex: Março" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -524,12 +529,12 @@ export default function CropsPage() {
                 />
                 <FormField
                   control={editForm.control}
-                  name="planting_season_end"
+                  name="fim_epoca_plantio"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Fim da Época de Plantio</FormLabel>
+                      <FormLabel>Fim Época de Plantio</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ex: Novembro" {...field} />
+                        <Input placeholder="Ex: Maio" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

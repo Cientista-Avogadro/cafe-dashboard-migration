@@ -80,21 +80,6 @@ export const INSERT_SETOR = gql`
   }
 `;
 
-// Operações de Lotes
-export const GET_LOTES = gql`
-  query GetLotes($setor_id: uuid!) {
-    lotes(where: { setor_id: { _eq: $setor_id } }) {
-      id
-      nome
-      setor_id
-      cultura_atual
-      status
-      latitude
-      longitude
-    }
-  }
-`;
-
 export const INSERT_LOTE = gql`
   mutation InsertLote($lote: lotes_insert_input!) {
     insert_lotes_one(object: $lote) {
@@ -112,6 +97,24 @@ export const GET_CULTURAS = gql`
       id
       nome
       ciclo_estimado_dias
+      variedade
+      produtividade
+      inicio_epoca_plantio
+      fim_epoca_plantio
+    }
+  }
+`;
+
+export const GET_CULTURA_BY_ID = gql`
+  query GetCulturaById($id: uuid!) {
+      culturas_by_pk(id: $id) {
+      id
+      nome
+      variedade	
+      produtividade
+      inicio_epoca_plantio
+      fim_epoca_plantio
+      ciclo_estimado_dias
     }
   }
 `;
@@ -121,6 +124,25 @@ export const INSERT_CULTURA = gql`
     insert_culturas_one(object: $cultura) {
       id
       nome
+      ciclo_estimado_dias
+      variedade
+      produtividade
+      inicio_epoca_plantio
+      fim_epoca_plantio
+    }
+  }
+`;
+
+export const UPDATE_CULTURA = gql`
+  mutation UpdateCultura($id: uuid!, $cultura: culturas_set_input!) {
+    update_culturas_by_pk(pk_columns: { id: $id }, _set: $cultura) {
+      id
+      nome
+      ciclo_estimado_dias
+      variedade
+      produtividade
+      inicio_epoca_plantio
+      fim_epoca_plantio
     }
   }
 `;
@@ -393,129 +415,133 @@ export const GET_USER_BY_ID = gql`
 
 // Operações de Setor (Sector)
 export const GET_SECTORS = gql`
-  query GetSectors($farmId: Int) {
-    sectors(where: { farm_id: { _eq: $farmId } }) {
+  query GetSectors($propriedade_id: uuid) {
+    setores(where: { propriedade_id: { _eq: $propriedade_id } }) {
       id
-      name
-      farm_id
-      area
-      current_crop
-      status
+      nome
+      propriedade_id
+      latitude
+      longitude
     }
   }
 `;
 
 export const GET_SECTOR_BY_ID = gql`
-  query GetSectorById($id: Int!) {
-    sectors_by_pk(id: $id) {
+  query GetSectorById($id: uuid!) {
+    setores_by_pk(id: $id) {
       id
-      name
-      farm_id
-      area
-      current_crop
-      status
+      nome
+      propriedade_id
+      latitude
+      longitude
     }
   }
 `;
 
 export const INSERT_SECTOR = gql`
-  mutation InsertSector($sector: sectors_insert_input!) {
-    insert_sectors_one(object: $sector) {
+  mutation InsertSector($setor: setores_insert_input!) {
+    insert_setores_one(object: $setor) {
       id
-      name
-      farm_id
-      area
-      current_crop
-      status
+      nome
+      propriedade_id
+      latitude
+      longitude
     }
   }
 `;
 
 export const UPDATE_SECTOR = gql`
-  mutation UpdateSector($id: Int!, $sector: sectors_set_input!) {
-    update_sectors_by_pk(pk_columns: { id: $id }, _set: $sector) {
+  mutation UpdateSector($id: uuid!, $setor: setores_set_input!) {
+    update_setores_by_pk(pk_columns: { id: $id }, _set: $setor) {
       id
-      name
-      farm_id
-      area
-      current_crop
-      status
+      nome
+      propriedade_id
+      latitude
+      longitude
     }
   }
 `;
 
 export const DELETE_SECTOR = gql`
-  mutation DeleteSector($id: Int!) {
-    delete_sectors_by_pk(id: $id) {
+  mutation DeleteSector($id: uuid!) {
+    delete_setores_by_pk(id: $id) {
       id
     }
   }
 `;
 
 // Operações de Lote (Lot)
-export const GET_LOTS = gql`
-  query GetLots($sectorId: Int) {
-    lots(where: { sector_id: { _eq: $sectorId } }) {
+export const GET_LOTES = gql`
+  query GetLots($setor_id: uuid) {
+    lotes(where: { setor_id: { _eq: $setor_id } }) {
       id
-      name
-      sector_id
-      area
-      current_crop
-      planting_date
-      expected_harvest_date
+      nome
+      setor_id
+      cultura_atual_id
       status
+      latitude
+      longitude
+      area
     }
   }
 `;
 
-export const GET_LOT_BY_ID = gql`
-  query GetLotById($id: Int!) {
-    lots_by_pk(id: $id) {
+export const GET_LOTE_BY_ID = gql`
+  query GetLotById($id: uuid!) {
+    lotes_by_pk(id: $id) {
       id
-      name
-      sector_id
-      area
-      current_crop
-      planting_date
-      expected_harvest_date
+      nome
+      setor_id
+      cultura_atual_id
       status
+      latitude
+      longitude
+      area
+    }
+  }
+`;
+
+export const GET_ALL_CULTURAS = gql`
+  query GetAllCulturas {
+    culturas {
+      id
+      nome
+      ciclo_estimado_dias
     }
   }
 `;
 
 export const INSERT_LOT = gql`
-  mutation InsertLot($lot: lots_insert_input!) {
-    insert_lots_one(object: $lot) {
+  mutation InsertLot($lote: lotes_insert_input!) {
+    insert_lotes_one(object: $lote) {
       id
-      name
-      sector_id
-      area
-      current_crop
-      planting_date
-      expected_harvest_date
+      nome
+      setor_id
+      cultura_atual
       status
+      latitude
+      longitude
     }
   }
 `;
 
 export const UPDATE_LOT = gql`
-  mutation UpdateLot($id: Int!, $lot: lots_set_input!) {
-    update_lots_by_pk(pk_columns: { id: $id }, _set: $lot) {
+  mutation UpdateLot($id: uuid!, $lote: lotes_set_input!) {
+    update_lotes_by_pk(pk_columns: { id: $id }, _set: $lote) {
       id
-      name
-      sector_id
-      area
-      current_crop
-      planting_date
-      expected_harvest_date
+      nome
+      setor_id
+      cultura_atual
       status
+      latitude
+      longitude
     }
   }
 `;
 
 export const DELETE_LOT = gql`
-  mutation DeleteLot($id: Int!) {
-    delete_lots_by_pk(id: $id) {
+  mutation DeleteLot($id: uuid!) {
+    delete_lotes_by_pk(id: $id) {
       id
     }
   }

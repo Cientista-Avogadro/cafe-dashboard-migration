@@ -56,10 +56,13 @@ export interface Lot {
   id: string; // UUID
   nome: string;
   setor_id: string;
-  cultura_atual?: string;
+  cultura_atual_id?: string;
   status?: string;
   latitude?: number;
   longitude?: number;
+  setor_nome?: string; // Nome do setor para exibição
+  area?: number; // Área em hectares
+  cultura?: Crop
 }
 
 // Crop type
@@ -67,6 +70,10 @@ export interface Crop {
   id: string; // UUID
   nome: string;
   ciclo_estimado_dias?: number;
+  variedade?: string;
+  produtividade?: number;
+  inicio_epoca_plantio?: string;
+  fim_epoca_plantio?: string;
 }
 
 // ProductStock type

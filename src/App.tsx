@@ -13,6 +13,7 @@ import CropsPage from "@/pages/crops-page";
 import SectorsPage from "@/pages/sectors-page";
 import ModulePage from "@/pages/module-page";
 import LotsPage from "./pages/lots-page";
+import LotDetailsPage from "@/pages/lot-details-page";
 
 function Router() {
   return (
@@ -23,6 +24,7 @@ function Router() {
       <ProtectedRoute path="/culturas" component={CropsPage} />
       <ProtectedRoute path="/setores" component={SectorsPage} />
       <ProtectedRoute path="/lotes" component={LotsPage} />
+      <ProtectedRoute path="/lotes/:id" component={LotDetailsPage} />
       <ProtectedRoute path="/producao" component={() => <ModulePage title="Produção" icon="ri-plant-line" />} />
       <ProtectedRoute path="/insumos" component={() => <ModulePage title="Insumos" icon="ri-shopping-basket-2-line" />} />
       <ProtectedRoute path="/irrigacao" component={() => <ModulePage title="Irrigação" icon="ri-drop-line" />} />
