@@ -50,11 +50,13 @@ export default function LotsPage() {
 
   // Query para buscar culturas para o dropdown
   const { data: culturasData } = useQuery<{ culturas: Array<{ id: string; nome: string; ciclo_estimado_dias?: number }> }>({  
-    queryKey: ["culturas"],
+    queryKey: ["culturas", user?.propriedade_id],
     queryFn: async () => {
-      const response = await graphqlRequest("GET_ALL_CULTURAS");
+      if (!user?.propriedade_id) return { culturas: [] };
+      const response = await graphqlRequest("GET_ALL_CULTURAS", { propriedade_id: user.propriedade_id });
       return response;
     },
+    enabled: !!user?.propriedade_id,
   });
 
   // Query para buscar setores para o dropdown

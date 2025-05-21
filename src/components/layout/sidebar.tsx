@@ -19,6 +19,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
     { name: "Culturas", icon: "ri-seedling-line", path: "/culturas" },
     { name: "Setores", icon: "ri-layout-grid-line", path: "/setores" },
     { name: "Lotes", icon: "ri-home-line", path: "/lotes" },
+    { name: "Canteiros", icon: "ri-layout-3-line", path: "/canteiros" },
     { name: "Produção", icon: "ri-plant-line", path: "/producao" },
     { name: "Insumos", icon: "ri-shopping-basket-2-line", path: "/insumos" },
     { name: "Irrigação", icon: "ri-drop-line", path: "/irrigacao" },

@@ -64,6 +64,7 @@ const cropSchema = z.object({
   produtividade: z.coerce.number().min(0, "Deve ser um valor positivo").optional(),
   inicio_epoca_plantio: z.string().optional(),
   fim_epoca_plantio: z.string().optional(),
+  propriedade_id: z.string().uuid().optional(),
 });
 
 type CropFormValues = z.infer<typeof cropSchema>;
@@ -77,11 +78,12 @@ export default function CropsPage() {
 
   // Query para buscar culturas
   const { data: culturas, isLoading } = useQuery<{ culturas: Crop[] }>({
-    queryKey: ["culturas"],
+    queryKey: ["culturas", user?.propriedade_id],
     queryFn: async () => {
-      return await graphqlRequest("GET_CULTURAS");
+      if (!user?.propriedade_id) return { culturas: [] };
+      return await graphqlRequest("GET_CULTURAS", { propriedade_id: user.propriedade_id });
     },
-    enabled: !!user,
+    enabled: !!user?.propriedade_id,
   });
   
   const crops = culturas?.culturas || [];
@@ -89,7 +91,11 @@ export default function CropsPage() {
   // Mutation para adicionar cultura
   const addCropMutation = useMutation({
     mutationFn: async (data: CropFormValues) => {
-      return await graphqlRequest("INSERT_CULTURA", { cultura: data });
+      const culturaData = {
+        ...data,
+        propriedade_id: user?.propriedade_id
+      };
+      return await graphqlRequest("INSERT_CULTURA", { cultura: culturaData });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["culturas"] });
@@ -152,16 +158,23 @@ export default function CropsPage() {
     },
   });
 
+  // Lista de meses para os selects
+  const meses = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+
   // Form para adicionar cultura
   const addForm = useForm<CropFormValues>({
     resolver: zodResolver(cropSchema),
     defaultValues: {
       nome: "",
       variedade: "",
-      ciclo_estimado_dias: 0,
-      produtividade: 0,
+      ciclo_estimado_dias: undefined,
+      produtividade: undefined,
       inicio_epoca_plantio: "",
       fim_epoca_plantio: "",
+      propriedade_id: user?.propriedade_id,
     },
   });
 
@@ -171,10 +184,11 @@ export default function CropsPage() {
     defaultValues: {
       nome: "",
       variedade: "",
-      ciclo_estimado_dias: 0,
-      produtividade: 0,
+      ciclo_estimado_dias: undefined,
+      produtividade: undefined,
       inicio_epoca_plantio: "",
       fim_epoca_plantio: "",
+      propriedade_id: user?.propriedade_id,
     },
   });
 
@@ -408,7 +422,15 @@ export default function CropsPage() {
                     <FormItem>
                       <FormLabel>Início Época de Plantio</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ex: Março" {...field} />
+                        <select 
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          {...field}
+                        >
+                          <option value="">Selecione um mês</option>
+                          {meses.map((mes) => (
+                            <option key={mes} value={mes}>{mes}</option>
+                          ))}
+                        </select>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -421,7 +443,15 @@ export default function CropsPage() {
                     <FormItem>
                       <FormLabel>Fim Época de Plantio</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ex: Maio" {...field} />
+                        <select 
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          {...field}
+                        >
+                          <option value="">Selecione um mês</option>
+                          {meses.map((mes) => (
+                            <option key={mes} value={mes}>{mes}</option>
+                          ))}
+                        </select>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -521,7 +551,15 @@ export default function CropsPage() {
                     <FormItem>
                       <FormLabel>Início Época de Plantio</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ex: Março" {...field} />
+                        <select 
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          {...field}
+                        >
+                          <option value="">Selecione um mês</option>
+                          {meses.map((mes) => (
+                            <option key={mes} value={mes}>{mes}</option>
+                          ))}
+                        </select>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -534,7 +572,15 @@ export default function CropsPage() {
                     <FormItem>
                       <FormLabel>Fim Época de Plantio</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ex: Maio" {...field} />
+                        <select 
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          {...field}
+                        >
+                          <option value="">Selecione um mês</option>
+                          {meses.map((mes) => (
+                            <option key={mes} value={mes}>{mes}</option>
+                          ))}
+                        </select>
                       </FormControl>
                       <FormMessage />
                     </FormItem>

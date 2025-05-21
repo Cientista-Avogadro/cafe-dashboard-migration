@@ -74,6 +74,7 @@ export interface Crop {
   produtividade?: number;
   inicio_epoca_plantio?: string;
   fim_epoca_plantio?: string;
+  propriedade_id?: string;
 }
 
 // ProductStock type
@@ -124,4 +125,35 @@ export interface Transaction {
   descricao?: string;
   data: string;
   categoria?: string;
+}
+
+// Canteiro (Bed) type
+export interface Canteiro {
+  id: string; // UUID
+  nome: string;
+  lote_id: string;
+  propriedade_id: string;
+  area?: number;
+  status?: string;
+  cultura_id?: string;
+  latitude?: number;
+  longitude?: number;
+  lote_nome?: string; // Nome do lote para exibição
+  cultura?: Crop;
+}
+
+// Planejamento (Planning) type
+export interface Planejamento {
+  id: string; // UUID
+  propriedade_id: string;
+  lote_id?: string;
+  canteiro_id?: string;
+  setor_id?: string;
+  cultura_id: string;
+  data_inicio: string;
+  data_fim_prevista: string;
+  status: string;
+  cultura?: Crop;
+  lote?: Lot;
+  canteiro?: Canteiro;
 }

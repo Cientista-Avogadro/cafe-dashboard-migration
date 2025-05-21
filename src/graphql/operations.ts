@@ -92,8 +92,8 @@ export const INSERT_LOTE = gql`
 
 // Operações de Culturas
 export const GET_CULTURAS = gql`
-  query GetCulturas {
-    culturas {
+  query GetCulturas($propriedade_id: uuid) {
+    culturas(where: { propriedade_id: { _eq: $propriedade_id } }) {
       id
       nome
       ciclo_estimado_dias
@@ -101,6 +101,7 @@ export const GET_CULTURAS = gql`
       produtividade
       inicio_epoca_plantio
       fim_epoca_plantio
+      propriedade_id
     }
   }
 `;
@@ -115,6 +116,7 @@ export const GET_CULTURA_BY_ID = gql`
       inicio_epoca_plantio
       fim_epoca_plantio
       ciclo_estimado_dias
+      propriedade_id
     }
   }
 `;
@@ -129,6 +131,7 @@ export const INSERT_CULTURA = gql`
       produtividade
       inicio_epoca_plantio
       fim_epoca_plantio
+      propriedade_id
     }
   }
 `;
@@ -143,20 +146,26 @@ export const UPDATE_CULTURA = gql`
       produtividade
       inicio_epoca_plantio
       fim_epoca_plantio
+      propriedade_id
     }
   }
 `;
 
 // Operações de Planejamentos
 export const GET_PLANEJAMENTOS = gql`
-  query GetPlanejamentos($lote_id: uuid!) {
-    planejamentos(where: { lote_id: { _eq: $lote_id } }) {
+  query GetPlanejamentos($lote_id: uuid, $canteiro_id: uuid, $propriedade_id: uuid) {
+    planejamentos(where: {
+      propriedade_id: { _eq: $propriedade_id }
+    }) {
       id
       lote_id
+      canteiro_id
+      setor_id
       cultura_id
       data_inicio
       data_fim_prevista
       status
+      propriedade_id
     }
   }
 `;
@@ -166,7 +175,21 @@ export const INSERT_PLANEJAMENTO = gql`
     insert_planejamentos_one(object: $planejamento) {
       id
       lote_id
+      canteiro_id
+      setor_id
       cultura_id
+      data_inicio
+      data_fim_prevista
+      status
+      propriedade_id
+    }
+  }
+`;
+
+export const UPDATE_PLANEJAMENTO = gql`
+  mutation UpdatePlanejamento($id: uuid!, $planejamento: planejamentos_set_input!) {
+    update_planejamentos_by_pk(pk_columns: { id: $id }, _set: $planejamento) {
+      id
     }
   }
 `;
@@ -177,9 +200,11 @@ export const GET_ATIVIDADES = gql`
     atividades(where: { planejamento_id: { _eq: $planejamento_id } }) {
       id
       planejamento_id
+      canteiro_id
       tipo
       data_prevista
       observacoes
+      propriedade_id
     }
   }
 `;
@@ -189,6 +214,8 @@ export const INSERT_ATIVIDADE = gql`
     insert_atividades_one(object: $atividade) {
       id
       planejamento_id
+      canteiro_id
+      propriedade_id
     }
   }
 `;
@@ -502,11 +529,12 @@ export const GET_LOTE_BY_ID = gql`
 `;
 
 export const GET_ALL_CULTURAS = gql`
-  query GetAllCulturas {
-    culturas {
+  query GetAllCulturas($propriedade_id: uuid) {
+    culturas(where: { propriedade_id: { _eq: $propriedade_id } }) {
       id
       nome
       ciclo_estimado_dias
+      propriedade_id
     }
   }
 `;
@@ -542,6 +570,79 @@ export const UPDATE_LOT = gql`
 export const DELETE_LOT = gql`
   mutation DeleteLot($id: uuid!) {
     delete_lotes_by_pk(id: $id) {
+      id
+    }
+  }
+`;
+
+// Operações de Canteiros (Beds)
+export const GET_CANTEIROS = gql`
+  query GetCanteiros($lote_id: uuid, $propriedade_id: uuid) {
+    canteiros(where: { propriedade_id: { _eq: $propriedade_id } }) {
+      id
+      nome
+      lote_id
+      propriedade_id
+      area
+      status
+      cultura_id
+      latitude
+      longitude
+    }
+  }
+`;
+
+export const GET_CANTEIRO_BY_ID = gql`
+  query GetCanteiroById($id: uuid!) {
+    canteiros_by_pk(id: $id) {
+      id
+      nome
+      lote_id
+      propriedade_id
+      area
+      status
+      cultura_id
+      latitude
+      longitude
+    }
+  }
+`;
+
+export const INSERT_CANTEIRO = gql`
+  mutation InsertCanteiro($canteiro: canteiros_insert_input!) {
+    insert_canteiros_one(object: $canteiro) {
+      id
+      nome
+      lote_id
+      propriedade_id
+      area
+      status
+      cultura_id
+      latitude
+      longitude
+    }
+  }
+`;
+
+export const UPDATE_CANTEIRO = gql`
+  mutation UpdateCanteiro($id: uuid!, $canteiro: canteiros_set_input!) {
+    update_canteiros_by_pk(pk_columns: { id: $id }, _set: $canteiro) {
+      id
+      nome
+      lote_id
+      propriedade_id
+      area
+      status
+      cultura_id
+      latitude
+      longitude
+    }
+  }
+`;
+
+export const DELETE_CANTEIRO = gql`
+  mutation DeleteCanteiro($id: uuid!) {
+    delete_canteiros_by_pk(id: $id) {
       id
     }
   }
