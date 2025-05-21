@@ -313,10 +313,35 @@ export const INSERT_PRODUTO_ESTOQUE = gql`
   }
 `;
 
+export const UPDATE_PRODUTO_ESTOQUE = gql`
+  mutation UpdateProdutoEstoque($id: uuid!, $produto: produtos_estoque_set_input!) {
+    update_produtos_estoque_by_pk(pk_columns: { id: $id }, _set: $produto) {
+      id
+      nome
+      propriedade_id
+    }
+  }
+`;
+
 // Operações de Movimentações de Estoque
 export const GET_MOVIMENTACOES_ESTOQUE = gql`
   query GetMovimentacoesEstoque($produto_id: uuid!) {
     movimentacoes_estoque(where: { produto_id: { _eq: $produto_id } }) {
+      id
+      produto_id
+      tipo
+      quantidade
+      data
+      descricao
+    }
+  }
+`;
+
+export const GET_ALL_MOVIMENTACOES_ESTOQUE = gql`
+  query GetAllMovimentacoesEstoque {
+    movimentacoes_estoque(
+      order_by: { data: desc }
+    ) {
       id
       produto_id
       tipo

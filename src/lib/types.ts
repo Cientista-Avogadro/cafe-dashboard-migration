@@ -95,6 +95,13 @@ export interface StockMovement {
   quantidade: number;
   data: string;
   descricao?: string;
+  produto?: {
+    id: string;
+    nome: string;
+    categoria?: string;
+    unidade?: string;
+    propriedade_id: string;
+  };
 }
 
 // Irrigation type
