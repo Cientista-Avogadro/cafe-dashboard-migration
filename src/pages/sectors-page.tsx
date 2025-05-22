@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Sector } from "@/lib/types";
-import { queryClient, graphqlRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { usePropertyData, executeHasuraOperation } from "@/hooks/use-hasura-query";
 import {
   Card,
   CardHeader,
@@ -42,19 +43,14 @@ export default function SectorsPage() {
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
   // Query para buscar setores
-  const { data, isLoading } = useQuery<{ setores: Sector[] }>({
-    queryKey: ["setores", user?.propriedade_id],
-    queryFn: async () => {
-      if (!user?.propriedade_id) return { setores: [] };
-      return await graphqlRequest("GET_SETORES", { propriedade_id: user.propriedade_id });
-    },
-    enabled: !!user?.propriedade_id,
-  });
+  const { data, isLoading } = usePropertyData<{ setores: Sector[] }>(
+    "GET_SETORES"
+  );
 
   // Mutation para adicionar setor
   const addSectorMutation = useMutation({
     mutationFn: async (data: SectorFormValues) => {
-      const response = await graphqlRequest("INSERT_SETOR", {
+      const response = await executeHasuraOperation("INSERT_SETOR", {
         setor: {
           ...data,
           propriedade_id: user?.propriedade_id,

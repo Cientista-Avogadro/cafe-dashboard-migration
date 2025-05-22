@@ -538,6 +538,21 @@ export const GET_LOTES = gql`
   }
 `;
 
+export const GET_LOTES_BY_PROPRIEDADE = gql`
+  query GetLotesByPropriedade($propriedade_id: uuid) {
+    lotes(where: {}) {
+      id
+      nome
+      setor_id
+      cultura_atual_id
+      status
+      latitude
+      longitude
+      area
+    }
+  }
+`;
+
 export const GET_LOTE_BY_ID = gql`
   query GetLotById($id: uuid!) {
     lotes_by_pk(id: $id) {

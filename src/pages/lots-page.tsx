@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Lot } from "@/lib/types";
-import { queryClient, graphqlRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { usePropertyData, executeHasuraOperation } from "@/hooks/use-hasura-query";
 import {
   Card,
   CardHeader,
@@ -49,29 +50,18 @@ export default function LotsPage() {
   const [, navigate] = useLocation();
 
   // Query para buscar culturas para o dropdown
-  const { data: culturasData } = useQuery<{ culturas: Array<{ id: string; nome: string; ciclo_estimado_dias?: number }> }>({  
-    queryKey: ["culturas", user?.propriedade_id],
-    queryFn: async () => {
-      if (!user?.propriedade_id) return { culturas: [] };
-      const response = await graphqlRequest("GET_ALL_CULTURAS", { propriedade_id: user.propriedade_id });
-      return response;
-    },
-    enabled: !!user?.propriedade_id,
-  });
+  const { data: culturasData } = usePropertyData<{ culturas: Array<{ id: string; nome: string; ciclo_estimado_dias?: number }> }>(
+    "GET_ALL_CULTURAS"
+  );
 
   // Query para buscar setores para o dropdown
-  const { data: setoresData } = useQuery<{ setores: Array<{ id: string; nome: string }> }>({  
-    queryKey: ["setores", user?.propriedade_id],
-    queryFn: async () => {
-      if (!user?.propriedade_id) return { setores: [] };
-      return await graphqlRequest("GET_SETORES", { propriedade_id: user.propriedade_id });
-    },
-    enabled: !!user?.propriedade_id,
-  });
+  const { data: setoresData } = usePropertyData<{ setores: Array<{ id: string; nome: string }> }>(
+    "GET_SETORES"
+  );
 
   // Query para buscar todos os lotes
   const { data: allLotsData, isLoading: isAllLotsLoading } = useQuery<{ lotes: Lot[] }>({  
-    queryKey: ["all-lotes"],
+    queryKey: ["all-lotes", setoresData],
     queryFn: async () => {
       if (!user?.propriedade_id) return { lotes: [] };
       // Aqui precisaríamos de uma query para buscar todos os lotes da propriedade
@@ -79,7 +69,7 @@ export default function LotsPage() {
       const allLotes: Lot[] = [];
       if (setoresData?.setores) {
         for (const setor of setoresData.setores) {
-          const result = await graphqlRequest("GET_LOTES", { setor_id: setor.id });
+          const result = await executeHasuraOperation("GET_LOTES", { setor_id: setor.id });
           if (result.lotes) {
             // Adicionar o nome do setor a cada lote para exibição
             result.lotes.forEach((lote: Lot) => {
@@ -101,16 +91,14 @@ export default function LotsPage() {
     queryKey: ["lotes", selectedSectorId],
     queryFn: async () => {
       if (!selectedSectorId) return { lotes: [] };
-      const result = await graphqlRequest("GET_LOTES", { setor_id: selectedSectorId });
-      
-      // Adicionar o nome do setor aos lotes
+      const result = await executeHasuraOperation("GET_LOTES", { setor_id: selectedSectorId });
+      // Adicionar o nome do setor a cada lote para exibição
       const setor = setoresData?.setores?.find(s => s.id === selectedSectorId);
-      if (result.lotes && setor) {
-        result.lotes.forEach((lote: Lot) => {
-          lote.setor_nome = setor.nome;
-        });
-      }
-      return result;
+      const lotesWithSectorName = result.lotes?.map((lote: Lot) => ({
+        ...lote,
+        setor_nome: setor?.nome || 'Setor desconhecido'
+      }));
+      return { lotes: lotesWithSectorName || [] };
     },
     enabled: !!selectedSectorId,
   });
@@ -118,9 +106,10 @@ export default function LotsPage() {
   // Mutation para adicionar lote
   const addLotMutation = useMutation({
     mutationFn: async (data: LotFormValues) => {
-      const response = await graphqlRequest("INSERT_LOTE", {
+      const response = await executeHasuraOperation("INSERT_LOTE", {
         lote: {
           ...data,
+          // Outros campos que possam ser necessários
         },
       });
       return response;
