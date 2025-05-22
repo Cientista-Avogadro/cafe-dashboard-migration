@@ -6,19 +6,26 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "./lib/protected-route";
-import AuthPage from "@/pages/auth-page";
-import DashboardPage from "@/pages/dashboard-page";
+import AuthPage from "@/pages/sistema/auth-page";
+import DashboardPage from "@/pages/principal/dashboard-page";
 
-import CropsPage from "@/pages/crops-page";
-import SectorsPage from "@/pages/sectors-page";
-import ModulePage from "@/pages/module-page";
-import LotsPage from "./pages/lots-page";
-import LotDetailsPage from "@/pages/lot-details-page";
-import CanteirosPage from "@/pages/canteiros-page";
-import CanteiroDetailsPage from "@/pages/canteiro-details-page";
-import PlanningPage from "@/pages/planning-page";
-import InsumosPage from "./pages/insumos-page";
-import EstoquePage from "./pages/estoque-page";
+// Área de Plantio
+import CropsPage from "@/pages/area-plantio/crops-page";
+import SectorsPage from "@/pages/area-plantio/sectors-page";
+import LotsPage from "@/pages/area-plantio/lots-page";
+import LotDetailsPage from "@/pages/area-plantio/lot-details-page";
+import CanteirosPage from "@/pages/area-plantio/canteiros-page";
+import CanteiroDetailsPage from "@/pages/area-plantio/canteiro-details-page";
+
+// Operações
+import PlanningPage from "@/pages/operacoes/planning-page";
+
+// Recursos
+import InsumosPage from "@/pages/recursos/insumos-page";
+import EstoquePage from "@/pages/recursos/estoque-page";
+
+// Sistema
+import ModulePage from "@/pages/sistema/module-page";
 
 function Router() {
   return (
