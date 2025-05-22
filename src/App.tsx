@@ -12,6 +12,7 @@ import DashboardPage from "@/pages/principal/dashboard-page";
 // Área de Plantio
 import CropsPage from "@/pages/area-plantio/crops-page";
 import SectorsPage from "@/pages/area-plantio/sectors-page";
+import SectorDetailsPage from "@/pages/area-plantio/sector-details-page";
 import LotsPage from "@/pages/area-plantio/lots-page";
 import LotDetailsPage from "@/pages/area-plantio/lot-details-page";
 import CanteirosPage from "@/pages/area-plantio/canteiros-page";
@@ -35,6 +36,7 @@ function Router() {
 
       <ProtectedRoute path="/culturas" component={CropsPage} />
       <ProtectedRoute path="/setores" component={SectorsPage} />
+      <ProtectedRoute path="/setores/:id" component={SectorDetailsPage} />
       <ProtectedRoute path="/lotes" component={LotsPage} />
       <ProtectedRoute path="/lotes/:id" component={LotDetailsPage} />
       <ProtectedRoute path="/canteiros" component={CanteirosPage} />

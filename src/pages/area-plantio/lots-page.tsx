@@ -21,6 +21,7 @@ import {
   Input,
   Skeleton,
   Badge,
+  Textarea,
 } from "@/components/ui";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -37,7 +38,9 @@ const lotSchema = z.object({
   status: z.string().optional(),
   latitude: z.coerce.number().optional(),
   longitude: z.coerce.number().optional(),
-  area: z.coerce.number().optional(),
+  area: z.coerce.number().min(0, "A área deve ser um número positivo").optional(),
+  descricao: z.string().optional(),
+  observacao: z.string().optional(),
 });
 type LotFormValues = z.infer<typeof lotSchema>;
 
@@ -106,10 +109,13 @@ export default function LotsPage() {
   // Mutation para adicionar lote
   const addLotMutation = useMutation({
     mutationFn: async (data: LotFormValues) => {
+      if (!user?.propriedade_id) {
+        throw new Error("ID da propriedade não encontrado");
+      }
       const response = await executeHasuraOperation("INSERT_LOTE", {
         lote: {
           ...data,
-          // Outros campos que possam ser necessários
+          propriedade_id: user.propriedade_id,
         },
       });
       return response;
@@ -136,7 +142,7 @@ export default function LotsPage() {
     },
   });
 
-  // Formulários
+  // Formulário de adição
   const addForm = useForm<LotFormValues>({
     resolver: zodResolver(lotSchema),
     defaultValues: {
@@ -147,6 +153,8 @@ export default function LotsPage() {
       latitude: undefined,
       longitude: undefined,
       area: undefined,
+      descricao: "",
+      observacao: "",
     },
   });
 
@@ -335,13 +343,15 @@ export default function LotsPage() {
 
       {/* Dialog de adicionar lote */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Adicionar Novo Lote</DialogTitle>
-            <DialogDescription>Preencha os detalhes do lote a ser adicionado.</DialogDescription>
-          </DialogHeader>
-          <Form {...addForm}>
-            <form onSubmit={addForm.handleSubmit(onAddSubmit as any)} className="space-y-4">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col p-0">
+          <div className="flex flex-col h-full max-h-[calc(90vh-8rem)]">
+            <DialogHeader className="flex-shrink-0 px-6 pt-6">
+              <DialogTitle>Adicionar Novo Lote</DialogTitle>
+              <DialogDescription>Preencha os detalhes do lote a ser adicionado.</DialogDescription>
+            </DialogHeader>
+            <div className="overflow-y-auto px-6 py-2 flex-1">
+              <Form {...addForm}>
+                <form id="add-lot-form" onSubmit={addForm.handleSubmit(onAddSubmit as any)} className="space-y-4 pb-4">
               <FormField
                 control={addForm.control}
                 name="setor_id"
@@ -461,27 +471,61 @@ export default function LotsPage() {
                 name="area"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Área (hectares)</FormLabel>
+                    <FormLabel>Área (m²)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="any" placeholder="Ex: 5.5" {...field} />
+                      <Input type="number" step="0.01" placeholder="Ex: 1000" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <DialogFooter>
+              <FormField
+                control={addForm.control}
+                name="descricao"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Descrição</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Descrição do lote" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={addForm.control}
+                name="observacao"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Observações</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Observações adicionais sobre o lote" 
+                        className="min-h-[100px]" 
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+                </form>
+              </Form>
+            </div>
+            <DialogFooter className="flex-shrink-0 border-t bg-background p-4">
+              <div className="flex justify-end gap-2 w-full">
                 <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={addLotMutation.isPending}>
+                <Button type="submit" form="add-lot-form" disabled={addLotMutation.isPending}>
                   {addLotMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
                   Adicionar Lote
                 </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+              </div>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

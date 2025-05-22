@@ -49,6 +49,10 @@ export interface Sector {
   propriedade_id: string;
   latitude?: number;
   longitude?: number;
+  area?: number; // Área em metros quadrados
+  descricao?: string; // Descrição do setor
+  observacao?: string; // Observações adicionais
+  updated_at?: string; // Data da última atualização
 }
 
 // Lot type
@@ -61,8 +65,11 @@ export interface Lot {
   latitude?: number;
   longitude?: number;
   setor_nome?: string; // Nome do setor para exibição
-  area?: number; // Área em hectares
-  cultura?: Crop
+  area?: number; // Área em metros quadrados
+  descricao?: string; // Descrição do lote
+  observacao?: string; // Observações adicionais
+  cultura?: Crop;
+  updated_at?: string; // Data da última atualização
 }
 
 // Crop type

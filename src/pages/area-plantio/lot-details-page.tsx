@@ -193,41 +193,59 @@ export default function LotDetailsPage() {
             </div>
 
             <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-medium text-slate-500">Setor</h3>
-                <p className="text-lg font-medium">{setor?.nome || "Não especificado"}</p>
-              </div>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-medium text-slate-500">Setor</h3>
+                  <p className="text-lg font-medium">{setor?.nome || "Não especificado"}</p>
+                </div>
 
-              <div>
-                <h3 className="text-sm font-medium text-slate-500">Status</h3>
-                <div className="mt-1">
-                  <Badge variant={lote.status === "Disponível" ? "outline" : "default"}>
-                    {lote.status || "Disponível"}
+                <div>
+                  <h3 className="text-sm font-medium text-slate-500">Status</h3>
+                  <Badge variant={lote.status === 'Ativo' ? 'default' : 'outline'} className="mt-1">
+                    {lote.status || 'Não definido'}
                   </Badge>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-medium text-slate-500">Área</h3>
+                  <p className="text-lg font-medium">
+                    {lote.area ? `${lote.area} m²` : 'Não informada'}
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-medium text-slate-500">Cultura Atual</h3>
+                  <p className="text-lg font-medium">
+                    {cultura?.nome || 'Nenhuma cultura definida'}
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100">
+                  <h3 className="text-sm font-medium text-slate-500 mb-1">Localização</h3>
+                  <p className="text-sm text-slate-700">
+                    {lote.latitude && lote.longitude 
+                      ? `${lote.latitude.toFixed(6)}, ${lote.longitude.toFixed(6)}`
+                      : 'Não especificada'}
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100">
+                  <h3 className="text-sm font-medium text-slate-500 mb-1">Última Atualização</h3>
+                  <p className="text-sm text-slate-700">
+                    {lote.updated_at 
+                      ? format(new Date(lote.updated_at), "PPp", { locale: ptBR }) 
+                      : 'Não informada'}
+                  </p>
                 </div>
               </div>
 
-              <div>
-                <h3 className="text-sm font-medium text-slate-500">Coordenadas</h3>
-                <p className="text-lg font-medium">
-                  {lote.latitude && lote.longitude
-                    ? `${lote.latitude.toFixed(6)}, ${lote.longitude.toFixed(6)}`
-                    : "Não especificadas"}
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-medium text-slate-500">Área</h3>
-                <p className="text-lg font-medium">
-                  {lote.area ? `${lote.area} hectares` : "Não especificada"}
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-medium text-slate-500">Cultura Atual</h3>
-                <p className="text-lg font-medium">
-                  {cultura?.nome || "Nenhuma cultura definida"}
-                </p>
+              <div className="pt-2 flex gap-2">
+                <Button variant="outline" className="w-1/2">
+                  <Edit className="h-4 w-4 mr-2" /> Editar Lote
+                </Button>
+                <Button variant="secondary" className="w-1/2">
+                  <MapPin className="h-4 w-4 mr-2" /> Gerenciar Localização
+                </Button>
               </div>
             </div>
           </div>
@@ -417,6 +435,30 @@ export default function LotDetailsPage() {
               )}
             </TabsContent>
           </Tabs>
+        </CardContent>
+      </Card>
+
+      {/* Informações Adicionais */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Informações Adicionais</CardTitle>
+          <CardDescription>Detalhes adicionais sobre o lote</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <h4 className="text-sm font-medium text-slate-500 mb-2">Descrição</h4>
+              <p className="text-slate-700">
+                {lote.descricao || "Nenhuma descrição disponível para este lote."}
+              </p>
+            </div>
+            <div>
+              <h4 className="text-sm font-medium text-slate-500 mb-2">Observações</h4>
+              <p className="text-slate-700">
+                {lote.observacao || "Nenhuma observação registrada para este lote."}
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

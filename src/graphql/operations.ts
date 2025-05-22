@@ -62,10 +62,13 @@ export const GET_SETORES = gql`
   query GetSetores($propriedade_id: uuid!) {
     setores(where: { propriedade_id: { _eq: $propriedade_id } }) {
       id
-      nome
-      propriedade_id
+      area
       latitude
+      descricao
       longitude
+      nome
+      observacao
+      propriedade_id
     }
   }
 `;
@@ -90,6 +93,24 @@ export const INSERT_LOTE = gql`
   }
 `;
 
+export const GET_LOTES_BY_SECTOR_ID = gql`
+  query GetLotesBySectorId($setor_id: uuid!) {
+    lotes(where: { setor_id: { _eq: $setor_id } }) {
+      area
+      cultura_atual_id
+      descricao
+      latitude
+      longitude
+      nome
+      observacao
+      propriedade_id
+      status
+      setor_id
+      id
+    }
+  }
+`;
+
 // Operações de Culturas
 export const GET_CULTURAS = gql`
   query GetCulturas($propriedade_id: uuid) {
@@ -108,7 +129,7 @@ export const GET_CULTURAS = gql`
 
 export const GET_CULTURA_BY_ID = gql`
   query GetCulturaById($id: uuid!) {
-      culturas_by_pk(id: $id) {
+    culturas_by_pk(id: $id) {
       id
       nome
       variedade	
@@ -117,6 +138,15 @@ export const GET_CULTURA_BY_ID = gql`
       fim_epoca_plantio
       ciclo_estimado_dias
       propriedade_id
+    }
+  }
+`;
+
+export const GET_CULTURAS_BY_IDS = gql`
+  query GetCulturasByIds($ids: [uuid!]!) {
+    culturas(where: { id: { _in: $ids } }) {
+      id
+      nome
     }
   }
 `;
@@ -470,10 +500,13 @@ export const GET_SECTORS = gql`
   query GetSectors($propriedade_id: uuid) {
     setores(where: { propriedade_id: { _eq: $propriedade_id } }) {
       id
-      nome
-      propriedade_id
+      area
       latitude
+      descricao
       longitude
+      nome
+      observacao
+      propriedade_id
     }
   }
 `;
@@ -482,10 +515,13 @@ export const GET_SECTOR_BY_ID = gql`
   query GetSectorById($id: uuid!) {
     setores_by_pk(id: $id) {
       id
-      nome
-      propriedade_id
+      area
       latitude
+      descricao
       longitude
+      nome
+      observacao
+      propriedade_id
     }
   }
 `;
@@ -526,14 +562,17 @@ export const DELETE_SECTOR = gql`
 export const GET_LOTES = gql`
   query GetLots($setor_id: uuid) {
     lotes(where: { setor_id: { _eq: $setor_id } }) {
-      id
-      nome
-      setor_id
+      area
       cultura_atual_id
-      status
+      descricao
       latitude
       longitude
-      area
+      nome
+      observacao
+      propriedade_id
+      status
+      setor_id
+      id
     }
   }
 `;
@@ -541,14 +580,17 @@ export const GET_LOTES = gql`
 export const GET_LOTES_BY_PROPRIEDADE = gql`
   query GetLotesByPropriedade($propriedade_id: uuid) {
     lotes(where: {}) {
-      id
-      nome
-      setor_id
+     area
       cultura_atual_id
-      status
+      descricao
       latitude
       longitude
-      area
+      nome
+      observacao
+      propriedade_id
+      status
+      setor_id
+      id
     }
   }
 `;
@@ -556,14 +598,17 @@ export const GET_LOTES_BY_PROPRIEDADE = gql`
 export const GET_LOTE_BY_ID = gql`
   query GetLotById($id: uuid!) {
     lotes_by_pk(id: $id) {
-      id
-      nome
-      setor_id
+      area
       cultura_atual_id
-      status
+      descricao
       latitude
       longitude
-      area
+      nome
+      observacao
+      propriedade_id
+      status
+      setor_id
+      id
     }
   }
 `;

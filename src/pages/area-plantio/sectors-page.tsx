@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Sector } from "@/lib/types";
 import { queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
@@ -21,10 +22,11 @@ import {
   Input,
   Skeleton,
   Badge,
+  Textarea,
 } from "@/components/ui";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Plus, Edit, Trash2, Search, Loader2 } from "lucide-react";
+import { Plus, Search, Loader2 } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,11 +35,15 @@ const sectorSchema = z.object({
   nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   latitude: z.coerce.number().optional(),
   longitude: z.coerce.number().optional(),
+  area: z.coerce.number().min(0, "A área deve ser um número positivo").optional(),
+  descricao: z.string().optional(),
+  observacao: z.string().optional(),
 });
 type SectorFormValues = z.infer<typeof sectorSchema>;
 
 export default function SectorsPage() {
   const { user } = useAuth();
+  const [, navigate] = useLocation();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
@@ -59,7 +65,10 @@ export default function SectorsPage() {
       return response;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["setores", user?.propriedade_id] });
+      // Invalida a query de setores para forçar o refetch
+      queryClient.invalidateQueries({ 
+        queryKey: ["GET_SETORES", { propriedade_id: user?.propriedade_id }] 
+      });
       setIsAddDialogOpen(false);
       toast({
         title: "Setor adicionado",
@@ -83,17 +92,13 @@ export default function SectorsPage() {
       nome: "",
       latitude: undefined,
       longitude: undefined,
+      area: undefined,
+      descricao: "",
+      observacao: "",
     },
   });
 
-  const editForm = useForm<SectorFormValues>({
-    resolver: zodResolver(sectorSchema),
-    defaultValues: {
-      nome: "",
-      latitude: undefined,
-      longitude: undefined,
-    },
-  });
+  // Removing unused editForm as it's not currently used in the application
 
   // Função de submit do formulário de adição
   const onAddSubmit = (data: SectorFormValues) => {
@@ -187,7 +192,11 @@ export default function SectorsPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredSectors.map((setor) => (
-                    <TableRow key={setor.id}>
+                    <TableRow 
+                      key={setor.id} 
+                      className="cursor-pointer hover:bg-slate-50 transition-colors"
+                      onClick={() => navigate(`/setores/${setor.id}`)}
+                    >
                       <TableCell className="font-medium">{setor.nome}</TableCell>
                       <TableCell>{setor.latitude ?? "-"}</TableCell>
                       <TableCell>{setor.longitude ?? "-"}</TableCell>
@@ -198,7 +207,11 @@ export default function SectorsPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredSectors.map((setor) => (
-                  <Card key={setor.id} className="overflow-hidden">
+                  <Card 
+                    key={setor.id} 
+                    className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => navigate(`/setores/${setor.id}`)}
+                  >
                     <div className="relative h-40 farm-card-image">
                       <img
                         src="https://images.unsplash.com/photo-1464226184884-fa280b87c399?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60"
@@ -218,14 +231,8 @@ export default function SectorsPage() {
                           ? `Lat: ${setor.latitude}, Long: ${setor.longitude}`
                           : "Sem localização"}
                       </p>
-                      {/* Campos extras podem ser adicionados aqui */}
                       <div className="flex space-x-2">
-                        <Button variant="outline" className="flex-1">
-                          <i className="ri-eye-line mr-1"></i> Detalhes
-                        </Button>
-                        <Button variant="secondary" className="flex-1">
-                          <i className="ri-edit-line mr-1"></i> Editar
-                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/setores/${setor.id}`)}>Ver Detalhes</Button>
                       </div>
                     </div>
                   </Card>
@@ -241,13 +248,15 @@ export default function SectorsPage() {
       </Card>
       {/* Dialog de adicionar setor */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Adicionar Novo Setor</DialogTitle>
-            <DialogDescription>Preencha os detalhes do setor a ser adicionado.</DialogDescription>
-          </DialogHeader>
-          <Form {...addForm}>
-            <form onSubmit={addForm.handleSubmit(onAddSubmit)} className="space-y-4">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col p-0">
+          <div className="flex flex-col h-full max-h-[calc(90vh-8rem)]">
+            <DialogHeader className="flex-shrink-0 px-6 pt-6">
+              <DialogTitle>Adicionar Novo Setor</DialogTitle>
+              <DialogDescription>Preencha os detalhes do setor a ser adicionado.</DialogDescription>
+            </DialogHeader>
+            <div className="overflow-y-auto px-6 py-2 flex-1">
+              <Form {...addForm}>
+                <form id="add-sector-form" onSubmit={addForm.handleSubmit(onAddSubmit)} className="space-y-4 pb-4">
               <FormField
                 control={addForm.control}
                 name="nome"
@@ -288,20 +297,67 @@ export default function SectorsPage() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={addForm.control}
+                  name="area"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Área (m²)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="Ex: 1000" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
-              <DialogFooter>
+              <FormField
+                control={addForm.control}
+                name="descricao"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Descrição</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Descrição do setor" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={addForm.control}
+                name="observacao"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Observações</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Observações adicionais sobre o setor" 
+                        className="min-h-[100px]" 
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+                </form>
+              </Form>
+            </div>
+            <DialogFooter className="flex-shrink-0 border-t bg-background p-4">
+              <div className="flex justify-end gap-2 w-full">
                 <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={addSectorMutation.isPending}>
+                <Button type="submit" form="add-sector-form" disabled={addSectorMutation.isPending}>
                   {addSectorMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
                   Adicionar Setor
                 </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+              </div>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
