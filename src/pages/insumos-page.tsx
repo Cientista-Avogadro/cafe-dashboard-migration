@@ -47,12 +47,18 @@ import {
   Plus, 
   Edit,
   Search,
-  Loader2
+  Loader2,
+  Table as TableIcon,
+  Grid,
+  Package2,
+  Leaf,
+  Droplet
 } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui";
 
 // Esquema de validação para insumo
 const insumoSchema = z.object({
@@ -71,7 +77,8 @@ export default function InsumosPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [currentInsumo, setCurrentInsumo] = useState<ProductStock | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("todos");
+  const [activeCategory, setActiveCategory] = useState("todos");
+  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
 
   // Query para buscar insumos
   const { data: insumosData, isLoading } = useQuery<{ produtos_estoque: ProductStock[] }>({
@@ -233,14 +240,15 @@ export default function InsumosPage() {
   const filteredInsumos = insumos?.filter((insumo) => {
     const matchesSearch =
       insumo.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (insumo.categoria && insumo.categoria.toLowerCase().includes(searchTerm.toLowerCase()));
+      (insumo.categoria && insumo.categoria.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (insumo.unidade && insumo.unidade.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    if (activeTab === "todos") {
+    if (activeCategory === "todos") {
       return matchesSearch;
-    } else if (activeTab === "baixo_estoque") {
+    } else if (activeCategory === "baixo_estoque") {
       return matchesSearch && (insumo.quantidade || 0) < 10; // Exemplo de limite para baixo estoque
     } else {
-      return matchesSearch && insumo.categoria === activeTab;
+      return matchesSearch && insumo.categoria === activeCategory;
     }
   });
 
@@ -269,117 +277,295 @@ export default function InsumosPage() {
     );
   }
 
-  // Agrupar insumos por categoria para as abas
-  const categoriasDisponiveis = ["todos", "baixo_estoque", ...new Set(insumos.map(i => i.categoria).filter(Boolean))];
+  // Agrupar insumos por categoria para o select
+  const categoriasDisponiveis = ["todos", "baixo_estoque", ...new Set(insumos.map(i => i.categoria).filter(Boolean))].sort();
+  
+  // Função para obter ícone com base na categoria
+  const getCategoryIcon = (categoria: string) => {
+    const lowerCategoria = categoria.toLowerCase();
+    if (lowerCategoria.includes('fertilizante') || lowerCategoria.includes('adubo')) {
+      return <Leaf className="h-3 w-3 text-green-600" />;
+    } else if (lowerCategoria.includes('defensivo') || lowerCategoria.includes('herbicida') || 
+               lowerCategoria.includes('fungicida') || lowerCategoria.includes('inseticida')) {
+      return <Droplet className="h-3 w-3 text-blue-600" />;
+    } else if (lowerCategoria.includes('semente')) {
+      return <Leaf className="h-3 w-3 text-amber-600" />;
+    } else if (lowerCategoria.includes('ferramenta') || lowerCategoria.includes('equipamento')) {
+      return <Package2 className="h-3 w-3 text-slate-600" />;
+    } else {
+      return <Package2 className="h-3 w-3 text-slate-600" />;
+    }
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+    <div className="container mx-auto py-6 space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Gestão de Insumos</h1>
-          <p className="text-slate-500">
-            Cadastre e gerencie os insumos utilizados na propriedade
-          </p>
+          <h1 className="text-3xl font-bold">Insumos Agrícolas</h1>
+          <p className="text-muted-foreground mt-1">Gerencie todos os insumos utilizados na propriedade</p>
         </div>
-        
-        <Button onClick={() => setIsAddDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Novo Insumo
+        <Button onClick={() => setIsAddDialogOpen(true)} className="bg-green-600 hover:bg-green-700">
+          <Plus className="mr-2 h-4 w-4" /> Novo Insumo
         </Button>
+      </div>
+
+      {/* Estatísticas rápidas */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total de Insumos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{insumos.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Categorias</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{new Set(insumos.map(i => i.categoria).filter(Boolean)).size}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Baixo Estoque</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-600">{insumos.filter(i => (i.quantidade || 0) < 10).length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Sem Estoque</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{insumos.filter(i => !i.quantidade || i.quantidade === 0).length}</div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <CardTitle>Insumos Cadastrados</CardTitle>
+              <CardTitle>Inventário de Insumos</CardTitle>
               <CardDescription>
-                Lista de insumos disponíveis no sistema
+                Gerencie todos os insumos utilizados na sua propriedade
               </CardDescription>
             </div>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Buscar insumos..."
-                className="pl-8"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setViewMode("table")} 
+                className={viewMode === "table" ? "bg-slate-100" : ""}
+              >
+                <TableIcon className="mr-2 h-4 w-4" />
+                Tabela
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setViewMode("cards")} 
+                className={viewMode === "cards" ? "bg-slate-100" : ""}
+              >
+                <Grid className="mr-2 h-4 w-4" />
+                Grelha
+              </Button>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="todos" value={activeTab} onValueChange={setActiveTab} className="mb-6">
-            <TabsList className="mb-4 flex flex-wrap">
-              <TabsTrigger value="todos">Todos</TabsTrigger>
-              <TabsTrigger value="baixo_estoque">Baixo Estoque</TabsTrigger>
-              {categoriasDisponiveis
-                .filter(cat => cat !== "todos" && cat !== "baixo_estoque")
-                .map(categoria => (
-                  <TabsTrigger key={categoria || 'sem-categoria'} value={categoria || 'sem-categoria'}>
-                    {categoria}
-                  </TabsTrigger>
-                ))
-              }
-            </TabsList>
-          </Tabs>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex flex-col sm:flex-row gap-4 w-full">
+              <div className="relative w-full max-w-sm">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Buscar por nome, categoria ou unidade..."
+                  className="pl-8"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
 
-          {filteredInsumos && filteredInsumos.length > 0 ? (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Unidade</TableHead>
-                    <TableHead>Quantidade</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredInsumos.map((insumo) => (
-                    <TableRow key={insumo.id}>
-                      <TableCell className="font-medium">{insumo.nome}</TableCell>
-                      <TableCell>{insumo.categoria}</TableCell>
-                      <TableCell>{insumo.unidade}</TableCell>
-                      <TableCell>
-                        {insumo.quantidade || 0} {insumo.unidade}
-                        {(insumo.quantidade || 0) < 10 && (
-                          <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800">Baixo</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
+              <div className="w-full max-w-xs">
+                <Select value={activeCategory} onValueChange={setActiveCategory}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filtrar por categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todas as categorias</SelectItem>
+                    <SelectItem value="baixo_estoque">Baixo Estoque</SelectItem>
+                    {categoriasDisponiveis
+                      .filter(cat => cat !== "todos" && cat !== "baixo_estoque")
+                      .map(categoria => (
+                        <SelectItem key={categoria || 'sem-categoria'} value={categoria || 'sem-categoria'}>
+                          {categoria}
+                        </SelectItem>
+                      ))
+                    }
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="w-full h-12" />
+              ))}
+            </div>
+          ) : filteredInsumos && filteredInsumos.length > 0 ? (
+            viewMode === "table" ? (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Unidade</TableHead>
+                      <TableHead>Quantidade</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredInsumos.map((insumo) => (
+                      <TableRow key={insumo.id}>
+                        <TableCell className="font-medium">{insumo.nome}</TableCell>
+                        <TableCell>
+                          {insumo.categoria ? (
+                            <span className="px-2 py-1 rounded-full text-xs bg-slate-100 flex items-center gap-1 w-fit">
+                              {getCategoryIcon(insumo.categoria)}
+                              {insumo.categoria}
+                            </span>
+                          ) : "-"}
+                        </TableCell>
+                        <TableCell>{insumo.unidade}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-medium ${(insumo.quantidade || 0) < 10 ? 'text-amber-600' : (insumo.quantidade || 0) === 0 ? 'text-red-600' : ''}`}>
+                              {insumo.quantidade || 0} {insumo.unidade}
+                            </span>
+                            {(insumo.quantidade || 0) === 0 && (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800">Esgotado</span>
+                            )}
+                            {(insumo.quantidade || 0) > 0 && (insumo.quantidade || 0) < 10 && (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800">Baixo</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => handleEdit(insumo)}
+                              title="Editar"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => handleDelete(insumo.id)}
+                              title="Excluir"
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredInsumos.map((insumo) => (
+                  <Card key={insumo.id} className="overflow-hidden">
+                    <CardHeader className="pb-2">
+                      <div className="flex justify-between items-start">
+                        <CardTitle className="text-lg">{insumo.nome}</CardTitle>
+                        <div className="flex gap-1">
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="icon"
+                            className="h-8 w-8"
                             onClick={() => handleEdit(insumo)}
-                            title="Editar"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="icon"
+                            className="h-8 w-8"
                             onClick={() => handleDelete(insumo.id)}
-                            title="Excluir"
                           >
                             <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                      </div>
+                      {insumo.categoria && (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-slate-100 mt-1">
+                          {getCategoryIcon(insumo.categoria)}
+                          {insumo.categoria}
+                        </span>
+                      )}
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Unidade:</span>
+                          <span>{insumo.unidade}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Quantidade:</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-medium ${(insumo.quantidade || 0) < 10 ? 'text-amber-600' : (insumo.quantidade || 0) === 0 ? 'text-red-600' : ''}`}>
+                              {insumo.quantidade || 0} {insumo.unidade}
+                            </span>
+                            {(insumo.quantidade || 0) === 0 && (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-800">Esgotado</span>
+                            )}
+                            {(insumo.quantidade || 0) > 0 && (insumo.quantidade || 0) < 10 && (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800">Baixo</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )
           ) : (
-            <div className="text-center py-8 text-slate-500">
+            <div className="text-center py-12 px-4 border rounded-md bg-slate-50">
               {searchTerm ? (
-                <p>Nenhum insumo encontrado para a busca "{searchTerm}"</p>
+                <>
+                  <p className="text-lg font-medium">Nenhum insumo encontrado</p>
+                  <p className="text-muted-foreground mt-1">Não encontramos resultados para "{searchTerm}"</p>
+                  <Button 
+                    variant="outline" 
+                    className="mt-4" 
+                    onClick={() => setSearchTerm("")}
+                  >
+                    Limpar busca
+                  </Button>
+                </>
               ) : (
-                <p>Nenhum insumo cadastrado. Clique em "Novo Insumo" para adicionar.</p>
+                <>
+                  <p className="text-lg font-medium">Nenhum insumo cadastrado</p>
+                  <p className="text-muted-foreground mt-1">Comece adicionando seu primeiro insumo</p>
+                  <Button 
+                    className="mt-4 bg-green-600 hover:bg-green-700" 
+                    onClick={() => setIsAddDialogOpen(true)}
+                  >
+                    <Plus className="mr-2 h-4 w-4" /> Adicionar Insumo
+                  </Button>
+                </>
               )}
             </div>
           )}
@@ -418,17 +604,20 @@ export default function InsumosPage() {
                   <FormItem>
                     <FormLabel>Categoria*</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Ex: Fertilizante" 
-                        {...field} 
-                        list="categorias-list"
-                      />
+                      <Select 
+                        value={field.value} 
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma categoria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categorias.map(cat => (
+                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
-                    <datalist id="categorias-list">
-                      {categorias.map(cat => (
-                        <option key={cat} value={cat} />
-                      ))}
-                    </datalist>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -441,17 +630,20 @@ export default function InsumosPage() {
                   <FormItem>
                     <FormLabel>Unidade*</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Ex: kg" 
-                        {...field} 
-                        list="unidades-list"
-                      />
+                      <Select 
+                        value={field.value} 
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma unidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {unidades.map(un => (
+                            <SelectItem key={un} value={un}>{un}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
-                    <datalist id="unidades-list">
-                      {unidades.map(un => (
-                        <option key={un} value={un} />
-                      ))}
-                    </datalist>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -526,17 +718,20 @@ export default function InsumosPage() {
                   <FormItem>
                     <FormLabel>Categoria*</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Ex: Fertilizante" 
-                        {...field} 
-                        list="categorias-list-edit"
-                      />
+                      <Select 
+                        value={field.value} 
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma categoria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categorias.map(cat => (
+                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
-                    <datalist id="categorias-list-edit">
-                      {categorias.map(cat => (
-                        <option key={cat} value={cat} />
-                      ))}
-                    </datalist>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -549,17 +744,20 @@ export default function InsumosPage() {
                   <FormItem>
                     <FormLabel>Unidade*</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Ex: kg" 
-                        {...field} 
-                        list="unidades-list-edit"
-                      />
+                      <Select 
+                        value={field.value} 
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma unidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {unidades.map(un => (
+                            <SelectItem key={un} value={un}>{un}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
-                    <datalist id="unidades-list-edit">
-                      {unidades.map(un => (
-                        <option key={un} value={un} />
-                      ))}
-                    </datalist>
                     <FormMessage />
                   </FormItem>
                 )}
