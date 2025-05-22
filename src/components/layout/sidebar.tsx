@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useState } from "react";
 
 interface SidebarProps {
   sidebarOpen: boolean;
@@ -13,21 +14,69 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
   // Check if current path is active
   const isActive = (path: string) => currentPath === path;
 
-  // Generate the navigation items for both desktop and mobile
-  const navItems = [
-    { name: "Dashboard", icon: "ri-dashboard-line", path: "/" },
-    { name: "Culturas", icon: "ri-seedling-line", path: "/culturas" },
-    { name: "Setores", icon: "ri-layout-grid-line", path: "/setores" },
-    { name: "Lotes", icon: "ri-home-line", path: "/lotes" },
-    { name: "Canteiros", icon: "ri-layout-3-line", path: "/canteiros" },
-    { name: "Produção", icon: "ri-plant-line", path: "/producao" },
-    { name: "Insumos", icon: "ri-shopping-basket-2-line", path: "/insumos" },
-    { name: "Irrigação", icon: "ri-drop-line", path: "/irrigacao" },
-    { name: "Pragas", icon: "ri-bug-line", path: "/pragas" },
-    { name: "Financeiro", icon: "ri-money-dollar-circle-line", path: "/financeiro" },
-    { name: "Estoque", icon: "ri-store-2-line", path: "/estoque" },
-    { name: "Relatórios", icon: "ri-bar-chart-2-line", path: "/relatorios" },
-    { name: "Configurações", icon: "ri-settings-4-line", path: "/configuracoes" },
+  // Track which categories are expanded
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    "Principal": true, // Principal is expanded by default
+    "Área de Plantio": false,
+    "Operações": false,
+    "Recursos": false,
+    "Gestão": false,
+    "Sistema": false
+  });
+
+  // Toggle category expansion
+  const toggleCategory = (categoryName: string) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [categoryName]: !prev[categoryName]
+    }));
+  };
+
+  // Define categories for navigation items
+  const navCategories = [
+    {
+      name: "Principal",
+      items: [
+        { name: "Dashboard", icon: "ri-dashboard-line", path: "/" }
+      ]
+    },
+    {
+      name: "Área de Plantio",
+      items: [
+        { name: "Culturas", icon: "ri-seedling-line", path: "/culturas" },
+        { name: "Setores", icon: "ri-layout-grid-line", path: "/setores" },
+        { name: "Lotes", icon: "ri-home-line", path: "/lotes" },
+        { name: "Canteiros", icon: "ri-layout-3-line", path: "/canteiros" }
+      ]
+    },
+    {
+      name: "Operações",
+      items: [
+        { name: "Produção", icon: "ri-plant-line", path: "/producao" },
+        { name: "Irrigação", icon: "ri-drop-line", path: "/irrigacao" },
+        { name: "Pragas", icon: "ri-bug-line", path: "/pragas" }
+      ]
+    },
+    {
+      name: "Recursos",
+      items: [
+        { name: "Insumos", icon: "ri-shopping-basket-2-line", path: "/insumos" },
+        { name: "Estoque", icon: "ri-store-2-line", path: "/estoque" }
+      ]
+    },
+    {
+      name: "Gestão",
+      items: [
+        { name: "Financeiro", icon: "ri-money-dollar-circle-line", path: "/financeiro" },
+        { name: "Relatórios", icon: "ri-bar-chart-2-line", path: "/relatorios" }
+      ]
+    },
+    {
+      name: "Sistema",
+      items: [
+        { name: "Configurações", icon: "ri-settings-4-line", path: "/configuracoes" }
+      ]
+    }
   ];
 
   return (
@@ -39,18 +88,33 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
             <div className="flex flex-shrink-0 items-center px-4">
               <span className="text-2xl font-bold text-primary">AgroGestão</span>
             </div>
-            <nav className="mt-5 flex-1 space-y-1 px-2">
-              {navItems.map((item) => (
-                <Link 
-                  key={item.path}
-                  href={item.path}
-                  className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md hover:bg-primary/10 hover:text-primary cursor-pointer ${
-                    isActive(item.path) ? 'bg-primary/10 text-primary' : ''
-                  }`}
-                >
-                  <i className={`${item.icon} mr-3 h-5 w-5`}></i>
-                  {item.name}
-                </Link>
+            <nav className="mt-5 flex-1 space-y-2 px-2">
+              {navCategories.map((category, categoryIndex) => (
+                <div key={categoryIndex} className="space-y-1">
+                  <button 
+                    onClick={() => toggleCategory(category.name)}
+                    className="w-full flex items-center justify-between px-2 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-md group transition-all duration-200 ease-in-out"
+                  >
+                    <div className="flex items-center">
+                      <i className={`ri-folder-${expandedCategories[category.name] ? 'open-' : ''}line mr-2 text-slate-500 group-hover:text-primary`}></i>
+                      <span className="font-medium">{category.name}</span>
+                    </div>
+                    <i className={`ri-arrow-${expandedCategories[category.name] ? 'down' : 'right'}-s-line transition-transform duration-200`}></i>
+                  </button>
+                  
+                  <div className={`space-y-1 overflow-hidden transition-all duration-200 ${expandedCategories[category.name] ? 'max-h-96' : 'max-h-0'}`}>
+                    {category.items.map((item) => (
+                      <Link 
+                        key={item.path}
+                        href={item.path}
+                        className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md hover:bg-primary/10 hover:text-primary cursor-pointer ml-4 ${isActive(item.path) ? 'bg-primary/10 text-primary' : 'text-slate-600'}`}
+                      >
+                        <i className={`${item.icon} mr-3 h-5 w-5`}></i>
+                        {item.name}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
               ))}
             </nav>
           </div>
@@ -102,19 +166,34 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
               <div className="flex flex-shrink-0 items-center px-4">
                 <span className="text-xl font-bold text-primary">AgroGestão</span>
               </div>
-              <nav className="mt-5 space-y-1 px-2">
-                {navItems.map((item) => (
-                  <Link 
-                    key={item.path}
-                    href={item.path}
-                    onClick={() => setSidebarOpen(false)}
-                    className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md hover:bg-primary/10 hover:text-primary cursor-pointer ${
-                      isActive(item.path) ? 'bg-primary/10 text-primary' : ''
-                    }`}
-                  >
-                    <i className={`${item.icon} mr-3 h-5 w-5`}></i>
-                    {item.name}
-                  </Link>
+              <nav className="mt-5 space-y-2 px-2">
+                {navCategories.map((category, categoryIndex) => (
+                  <div key={categoryIndex} className="space-y-1">
+                    <button 
+                      onClick={() => toggleCategory(category.name)}
+                      className="w-full flex items-center justify-between px-2 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-md group transition-all duration-200 ease-in-out"
+                    >
+                      <div className="flex items-center">
+                        <i className={`ri-folder-${expandedCategories[category.name] ? 'open-' : ''}line mr-2 text-slate-500 group-hover:text-primary`}></i>
+                        <span className="font-medium">{category.name}</span>
+                      </div>
+                      <i className={`ri-arrow-${expandedCategories[category.name] ? 'down' : 'right'}-s-line transition-transform duration-200`}></i>
+                    </button>
+                    
+                    <div className={`space-y-1 overflow-hidden transition-all duration-200 ${expandedCategories[category.name] ? 'max-h-96' : 'max-h-0'}`}>
+                      {category.items.map((item) => (
+                        <Link 
+                          key={item.path}
+                          href={item.path}
+                          onClick={() => setSidebarOpen(false)}
+                          className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md hover:bg-primary/10 hover:text-primary cursor-pointer ml-4 ${isActive(item.path) ? 'bg-primary/10 text-primary' : 'text-slate-600'}`}
+                        >
+                          <i className={`${item.icon} mr-3 h-5 w-5`}></i>
+                          {item.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </nav>
             </div>
