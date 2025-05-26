@@ -27,6 +27,8 @@ import EstoquePage from "@/pages/recursos/estoque-page";
 
 // Sistema
 import ModulePage from "@/pages/sistema/module-page";
+import IrrigationPage from "./pages/operacoes/irrigation-page";
+import PestPage from "./pages/operacoes/pest-page";
 
 function Router() {
   return (
@@ -43,8 +45,8 @@ function Router() {
       <ProtectedRoute path="/canteiros/:id" component={CanteiroDetailsPage} />
       <ProtectedRoute path="/producao" component={PlanningPage} />
       <ProtectedRoute path="/insumos" component={InsumosPage} />
-      <ProtectedRoute path="/irrigacao" component={() => <ModulePage title="Irrigação" icon="ri-drop-line" />} />
-      <ProtectedRoute path="/pragas" component={() => <ModulePage title="Pragas" icon="ri-bug-line" />} />
+      <ProtectedRoute path="/irrigacao" component={IrrigationPage} />
+      <ProtectedRoute path="/pragas" component={PestPage} />
       <ProtectedRoute path="/financeiro" component={() => <ModulePage title="Financeiro" icon="ri-money-dollar-circle-line" />} />
       <ProtectedRoute path="/estoque" component={EstoquePage} />
       <ProtectedRoute path="/relatorios" component={() => <ModulePage title="Relatórios" icon="ri-bar-chart-2-line" />} />

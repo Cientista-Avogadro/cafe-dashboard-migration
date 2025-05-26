@@ -114,7 +114,9 @@ export interface StockMovement {
 // Irrigation type
 export interface Irrigation {
   id: string; // UUID
-  lote_id: string;
+  lote_id?: string;
+  canteiro_id?: string;
+  setor_id?: string;
   data: string;
   volume_agua: number;
   metodo: string;

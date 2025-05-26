@@ -252,13 +252,70 @@ export const INSERT_ATIVIDADE = gql`
 
 // Operações de Irrigações
 export const GET_IRRIGACOES = gql`
-  query GetIrrigacoes($lote_id: uuid!) {
-    irrigacoes(where: { lote_id: { _eq: $lote_id } }) {
+  query GetIrrigacoes($lote_id: uuid, $propriedade_id: uuid) {
+    irrigacoes(where: { propriedade_id: { _eq: $propriedade_id } }) {
+      id
+      lote_id
+      canteiro_id
+      setor_id
+      data
+      volume_agua
+      metodo
+      propriedade_id
+    }
+  }
+`;
+
+export const GET_IRRIGACOES_BY_LOTE = gql`
+  query GetIrrigacoesByLote($lote_id: uuid, $propriedade_id: uuid) {
+    irrigacoes(where: {
+      _and: [
+        { propriedade_id: { _eq: $propriedade_id } },
+        { lote_id: { _eq: $lote_id } }
+      ]
+    }) {
       id
       lote_id
       data
       volume_agua
       metodo
+      propriedade_id
+    }
+  }
+`;
+
+export const GET_IRRIGACOES_BY_CANTEIRO = gql`
+  query GetIrrigacoesByCanteiro($canteiro_id: uuid, $propriedade_id: uuid) {
+    irrigacoes(where: {
+      _and: [
+        { propriedade_id: { _eq: $propriedade_id } },
+        { canteiro_id: { _eq: $canteiro_id } }
+      ]
+    }) {
+      id
+      canteiro_id
+      data
+      volume_agua
+      metodo
+      propriedade_id
+    }
+  }
+`;
+
+export const GET_IRRIGACOES_BY_SETOR = gql`
+  query GetIrrigacoesBySetor($setor_id: uuid, $propriedade_id: uuid) {
+    irrigacoes(where: {
+      _and: [
+        { propriedade_id: { _eq: $propriedade_id } },
+        { setor_id: { _eq: $setor_id } }
+      ]
+    }) {
+      id
+      setor_id
+      data
+      volume_agua
+      metodo
+      propriedade_id
     }
   }
 `;
@@ -268,6 +325,12 @@ export const INSERT_IRRIGACAO = gql`
     insert_irrigacoes_one(object: $irrigacao) {
       id
       lote_id
+      canteiro_id
+      setor_id
+      data
+      volume_agua
+      metodo
+      propriedade_id
     }
   }
 `;
@@ -579,8 +642,8 @@ export const GET_LOTES = gql`
 
 export const GET_LOTES_BY_PROPRIEDADE = gql`
   query GetLotesByPropriedade($propriedade_id: uuid) {
-    lotes(where: {}) {
-     area
+    lotes(where: { propriedade_id: { _eq: $propriedade_id } }) {
+      area
       cultura_atual_id
       descricao
       latitude
