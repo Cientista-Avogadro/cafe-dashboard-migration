@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Pest } from "@/lib/types";
+import { Pest, Lot, Sector, Canteiro } from "@/lib/types";
 import { graphqlRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 import {
   Card,
@@ -31,9 +30,6 @@ import {
   Search,
   Plus,
   Loader2,
-  Bug,
-  Calendar,
-  ArrowUpDown,
 } from "lucide-react";
 import {
   Select,
@@ -53,7 +49,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -65,11 +60,19 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 // Schema for pest occurrence
 const pestSchema = z.object({
-  lote_id: z.string().uuid("ID do lote inválido"),
+  lote_id: z.string().uuid("ID do lote inválido").optional(),
+  canteiro_id: z.string().uuid("ID do canteiro inválido").optional(),
+  setor_id: z.string().uuid("ID do setor inválido").optional(),
   data: z.string().min(1, "Data é obrigatória"),
   tipo_praga: z.string().min(1, "Tipo de praga é obrigatório"),
   metodo_controle: z.string().min(1, "Método de controle é obrigatório"),
   resultado: z.string().min(1, "Resultado é obrigatório"),
+}).refine(data => {
+  // Verifica se pelo menos um dos campos de área está preenchido
+  return !!(data.lote_id || data.canteiro_id || data.setor_id);
+}, {
+  message: "Pelo menos um tipo de área (lote, canteiro ou setor) deve ser selecionado",
+  path: ["lote_id"], // Mostra a mensagem no campo lote_id
 });
 
 type PestFormValues = z.infer<typeof pestSchema>;
@@ -78,11 +81,12 @@ export default function PestPage() {
   const { user } = useAuth();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedLoteId, setSelectedLoteId] = useState<string | null>(null);
+  const [selectedAreaType, setSelectedAreaType] = useState<"lote" | "canteiro" | "setor" | null>(null);
+  const [selectedAreaId, setSelectedAreaId] = useState<string>("-1");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // Query to fetch lots
-  const { data: lotesData } = useQuery({
+  const { data: lotesData } = useQuery<{ lotes: Lot[] }>({  
     queryKey: ["lotes", user?.propriedade_id],
     queryFn: async () => {
       if (!user?.propriedade_id) return { lotes: [] };
@@ -90,21 +94,135 @@ export default function PestPage() {
     },
     enabled: !!user?.propriedade_id,
   });
+  
+  // Query to fetch sectors
+  const { data: setoresData } = useQuery<{ setores: Sector[] }>({  
+    queryKey: ["setores", user?.propriedade_id],
+    queryFn: async () => {
+      if (!user?.propriedade_id) return { setores: [] };
+      return await graphqlRequest("GET_SETORES", { propriedade_id: user.propriedade_id });
+    },
+    enabled: !!user?.propriedade_id,
+  });
+  
+  // Query to fetch beds (canteiros)
+  const { data: canteirosData } = useQuery<{ canteiros: Canteiro[] }>({  
+    queryKey: ["canteiros", user?.propriedade_id],
+    queryFn: async () => {
+      if (!user?.propriedade_id) return { canteiros: [] };
+      return await graphqlRequest("GET_CANTEIROS", { propriedade_id: user.propriedade_id });
+    },
+    enabled: !!user?.propriedade_id,
+  });
 
   // Query to fetch pest occurrences
-  const { data: pestData, isLoading } = useQuery<{ pragas: Pest[] }>({
-    queryKey: ["pragas", selectedLoteId],
+  const { data: pestData, isLoading } = useQuery<{ pragas: Pest[] }>({  
+    queryKey: ["pragas", user?.propriedade_id, selectedAreaId, selectedAreaType, statusFilter],
     queryFn: async () => {
-      if (!selectedLoteId) return { pragas: [] };
-      return await graphqlRequest("GET_PRAGAS", { lote_id: selectedLoteId });
+      if (!user?.propriedade_id) return { pragas: [] };
+      
+      // Se não tiver tipo de área selecionado ou estiver visualizando todas
+      if (!selectedAreaType || (selectedAreaId === "-1" && !selectedAreaType)) {
+        return await graphqlRequest("GET_PRAGAS", { 
+          propriedade_id: user.propriedade_id 
+        });
+      } 
+      
+      // Verificar se é para mostrar todos de um tipo ou um item específico
+      if (selectedAreaId === "-1") {
+        // Exibir todos os itens do tipo selecionado
+        if (selectedAreaType === "lote") {
+          console.log("Filtrando por todos os lotes");
+          // Buscar todas as pragas da propriedade e filtrar no frontend
+          const response = await graphqlRequest("GET_PRAGAS", { 
+            propriedade_id: user.propriedade_id 
+          });
+          // Filtrar apenas os que têm lote_id
+          response.pragas = response.pragas.filter((item: Pest) => !!item.lote_id);
+          return response;
+          
+        } else if (selectedAreaType === "canteiro") {
+          console.log("Filtrando por todos os canteiros");
+          // Buscar todas as pragas da propriedade e filtrar no frontend
+          const response = await graphqlRequest("GET_PRAGAS", { 
+            propriedade_id: user.propriedade_id 
+          });
+          // Filtrar apenas os que têm canteiro_id
+          response.pragas = response.pragas.filter((item: Pest) => !!item.canteiro_id);
+          return response;
+          
+        } else if (selectedAreaType === "setor") {
+          console.log("Filtrando por todos os setores");
+          // Buscar todas as pragas da propriedade e filtrar no frontend
+          const response = await graphqlRequest("GET_PRAGAS", { 
+            propriedade_id: user.propriedade_id 
+          });
+          // Filtrar apenas os que têm setor_id
+          response.pragas = response.pragas.filter((item: Pest) => !!item.setor_id);
+          return response;
+        }
+      } else {
+        // Filtrar por área específica
+        if (selectedAreaType === "lote" && selectedAreaId) {
+          console.log("Filtrando por lote_id:", selectedAreaId);
+          return await graphqlRequest("GET_PRAGAS_BY_LOTE", { 
+            propriedade_id: user.propriedade_id,
+            lote_id: selectedAreaId
+          });
+        } else if (selectedAreaType === "canteiro" && selectedAreaId) {
+          console.log("Filtrando por canteiro_id:", selectedAreaId);
+          return await graphqlRequest("GET_PRAGAS_BY_CANTEIRO", { 
+            propriedade_id: user.propriedade_id,
+            canteiro_id: selectedAreaId
+          });
+        } else if (selectedAreaType === "setor" && selectedAreaId) {
+          console.log("Filtrando por setor_id:", selectedAreaId);
+          return await graphqlRequest("GET_PRAGAS_BY_SETOR", { 
+            propriedade_id: user.propriedade_id,
+            setor_id: selectedAreaId
+          });
+        }
+      }
+      
+      // Caso contrário, retornamos todas as pragas
+      return await graphqlRequest("GET_PRAGAS", { 
+        propriedade_id: user.propriedade_id 
+      });
     },
-    enabled: !!selectedLoteId,
+    enabled: !!user?.propriedade_id,
   });
 
   // Mutation to add pest occurrence
   const addPestMutation = useMutation({
     mutationFn: async (data: PestFormValues) => {
-      return await graphqlRequest("INSERT_PRAGA", { praga: data });
+      // IMPORTANTE: Enviar apenas o campo de área relevante, sem incluir os outros campos
+      // (nem mesmo como nulos) para respeitar a restrição do banco de dados
+      let pestData: any = {
+        data: data.data,
+        tipo_praga: data.tipo_praga,
+        metodo_controle: data.metodo_controle,
+        resultado: data.resultado,
+        propriedade_id: user?.propriedade_id,
+        area_tipo: undefined // Será definido abaixo
+      };
+      
+      // Criar um novo objeto com apenas o campo de área relevante
+      if (data.lote_id) {
+        pestData.area_tipo = "lote";
+        pestData.lote_id = data.lote_id;
+        // NÃO incluir canteiro_id ou setor_id, nem mesmo como undefined ou null
+      } else if (data.canteiro_id) {
+        pestData.area_tipo = "canteiro";
+        pestData.canteiro_id = data.canteiro_id;
+        // NÃO incluir lote_id ou setor_id, nem mesmo como undefined ou null
+      } else if (data.setor_id) {
+        pestData.area_tipo = "setor";
+        pestData.setor_id = data.setor_id;
+        // NÃO incluir lote_id ou canteiro_id, nem mesmo como undefined ou null
+      }
+      
+      console.log("Dados adaptados para envio:", pestData);
+      return await graphqlRequest("INSERT_PRAGA", { praga: pestData });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pragas"] });
@@ -128,7 +246,9 @@ export default function PestPage() {
   const addForm = useForm<PestFormValues>({
     resolver: zodResolver(pestSchema),
     defaultValues: {
-      lote_id: "",
+      lote_id: undefined,
+      canteiro_id: undefined,
+      setor_id: undefined,
       data: new Date().toISOString().split('T')[0],
       tipo_praga: "",
       metodo_controle: "",
@@ -167,14 +287,20 @@ export default function PestPage() {
     "Em andamento"
   ];
 
-  // Filter pest occurrences
-  const filteredPests = pestData?.pragas?.filter((pest) => {
-    const matchesSearch = 
+  // Filter based on search term and status
+  const filteredPests = pestData?.pragas?.filter(pest => {
+    // Search filter
+    const matchesSearch = searchTerm === "" || 
       pest.tipo_praga.toLowerCase().includes(searchTerm.toLowerCase()) ||
       pest.metodo_controle.toLowerCase().includes(searchTerm.toLowerCase());
     
-    if (statusFilter === "all") return matchesSearch;
-    return matchesSearch && pest.resultado.toLowerCase() === statusFilter.toLowerCase();
+    // Status filter
+    const matchesStatus = statusFilter === "all" || 
+      (statusFilter === "resolvido" && pest.resultado.includes("Controle completo")) ||
+      (statusFilter === "parcial" && pest.resultado.includes("Controle parcial")) ||
+      (statusFilter === "pendente" && pest.resultado.includes("Sem controle"));
+    
+    return matchesSearch && matchesStatus;
   });
 
   // Calculate statistics
@@ -259,18 +385,81 @@ export default function PestPage() {
               />
             </div>
             
-            <Select value={selectedLoteId || ""} onValueChange={setSelectedLoteId}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Selecione um lote" />
-              </SelectTrigger>
-              <SelectContent>
-                {lotesData?.lotes?.map((lote) => (
-                  <SelectItem key={lote.id} value={lote.id}>
-                    {lote.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center space-x-2 mb-4">
+              <span className="text-sm font-medium">Filtrar por:</span>
+              <Select
+                value={selectedAreaType || "todas"}
+                onValueChange={(value: "todas" | "lote" | "canteiro" | "setor") => {
+                  console.log("Valor selecionado:", value);
+                  if (value === "todas") {
+                    setSelectedAreaType(null);
+                    setSelectedAreaId("-1");
+                  } else {
+                    setSelectedAreaType(value);
+                    // Definir -1 para mostrar todos do tipo selecionado
+                    setSelectedAreaId("-1");
+                  }
+                }}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todos</SelectItem>
+                  <SelectItem value="lote">Lote</SelectItem>
+                  <SelectItem value="canteiro">Canteiro</SelectItem>
+                  <SelectItem value="setor">Setor</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {selectedAreaType === "lote" && (
+                <Select value={selectedAreaId} onValueChange={setSelectedAreaId}>
+                  <SelectTrigger className="w-[250px]">
+                    <SelectValue placeholder="Selecione um lote" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="-1">Todos os lotes</SelectItem>
+                    {lotesData?.lotes?.filter(lote => !!lote.id).map((lote: Lot) => (
+                      <SelectItem key={lote.id} value={lote.id}>
+                        {lote.nome || `Lote ${lote.id.substring(0, 8)}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              
+              {selectedAreaType === "canteiro" && (
+                <Select value={selectedAreaId} onValueChange={setSelectedAreaId}>
+                  <SelectTrigger className="w-[250px]">
+                    <SelectValue placeholder="Selecione um canteiro" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="-1">Todos os canteiros</SelectItem>
+                    {canteirosData?.canteiros?.filter(canteiro => !!canteiro.id).map((canteiro: Canteiro) => (
+                      <SelectItem key={canteiro.id} value={canteiro.id}>
+                        {canteiro.nome || `Canteiro ${canteiro.id.substring(0, 8)}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              
+              {selectedAreaType === "setor" && (
+                <Select value={selectedAreaId} onValueChange={setSelectedAreaId}>
+                  <SelectTrigger className="w-[250px]">
+                    <SelectValue placeholder="Selecione um setor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="-1">Todos os setores</SelectItem>
+                    {setoresData?.setores?.filter(setor => !!setor.id).map((setor: Sector) => (
+                      <SelectItem key={setor.id} value={setor.id}>
+                        {setor.nome || `Setor ${setor.id.substring(0, 8)}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
             
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[200px]">
@@ -278,11 +467,9 @@ export default function PestPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os resultados</SelectItem>
-                {results.map((result) => (
-                  <SelectItem key={result} value={result.toLowerCase()}>
-                    {result}
-                  </SelectItem>
-                ))}
+                <SelectItem value="resolvido">Resolvido</SelectItem>
+                <SelectItem value="parcial">Parcial</SelectItem>
+                <SelectItem value="pendente">Pendente</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -293,15 +480,11 @@ export default function PestPage() {
                 <Skeleton key={i} className="w-full h-12" />
               ))}
             </div>
-          ) : !selectedLoteId ? (
-            <div className="text-center py-10 text-muted-foreground">
-              Selecione um lote para ver as ocorrências de pragas
-            </div>
           ) : filteredPests?.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
-              {searchTerm || statusFilter !== "all"
-                ? "Nenhuma ocorrência encontrada com os filtros aplicados"
-                : "Nenhuma ocorrência registrada para este lote"}
+              {searchTerm || statusFilter !== "all" 
+                ? "Nenhum registro encontrado com os filtros aplicados"
+                : "Nenhum registro de praga para os filtros selecionados"}
             </div>
           ) : (
             <div className="rounded-md border">
@@ -360,17 +543,97 @@ export default function PestPage() {
                 name="lote_id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Lote*</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <FormLabel>Lote</FormLabel>
+                    <Select 
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        // Limpar outros campos de área quando este for selecionado
+                        if (value) {
+                          addForm.setValue("canteiro_id", undefined);
+                          addForm.setValue("setor_id", undefined);
+                        }
+                      }} 
+                      value={field.value}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione um lote" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {lotesData?.lotes?.map((lote) => (
+                        {lotesData?.lotes?.filter(lote => !!lote.id).map((lote: Lot) => (
                           <SelectItem key={lote.id} value={lote.id}>
-                            {lote.nome}
+                            {lote.nome || `Lote ${lote.id.substring(0, 8)}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={addForm.control}
+                name="canteiro_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Canteiro</FormLabel>
+                    <Select 
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        // Limpar outros campos de área quando este for selecionado
+                        if (value) {
+                          addForm.setValue("lote_id", undefined);
+                          addForm.setValue("setor_id", undefined);
+                        }
+                      }} 
+                      value={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um canteiro" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {canteirosData?.canteiros?.filter(canteiro => !!canteiro.id).map((canteiro: Canteiro) => (
+                          <SelectItem key={canteiro.id} value={canteiro.id}>
+                            {canteiro.nome || `Canteiro ${canteiro.id.substring(0, 8)}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={addForm.control}
+                name="setor_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Setor</FormLabel>
+                    <Select 
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        // Limpar outros campos de área quando este for selecionado
+                        if (value) {
+                          addForm.setValue("lote_id", undefined);
+                          addForm.setValue("canteiro_id", undefined);
+                        }
+                      }} 
+                      value={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um setor" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {setoresData?.setores?.filter(setor => !!setor.id).map((setor: Sector) => (
+                          <SelectItem key={setor.id} value={setor.id}>
+                            {setor.nome || `Setor ${setor.id.substring(0, 8)}`}
                           </SelectItem>
                         ))}
                       </SelectContent>

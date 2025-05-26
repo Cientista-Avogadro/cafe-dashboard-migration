@@ -337,7 +337,102 @@ export const INSERT_IRRIGACAO = gql`
 
 // Operações de Pragas
 export const GET_PRAGAS = gql`
-  query GetPragas($lote_id: uuid!) {
+  query GetPragas($propriedade_id: uuid) {
+    pragas(where: { propriedade_id: { _eq: $propriedade_id } }) {
+      id
+      lote_id
+      data
+      tipo_praga
+      metodo_controle
+      resultado
+      propriedade_id
+    }
+  }
+`;
+
+export const GET_PRAGAS_BY_LOTE = gql`
+  query GetPragasByLote($lote_id: uuid, $propriedade_id: uuid) {
+    pragas(where: {
+      _and: [
+        { propriedade_id: { _eq: $propriedade_id } },
+        { lote_id: { _eq: $lote_id } }
+      ]
+    }) {
+      id
+      lote_id
+      canteiro_id
+      setor_id
+      data
+      tipo_praga
+      metodo_controle
+      resultado
+      propriedade_id
+    }
+  }
+`;
+
+export const GET_PRAGAS_BY_CANTEIRO = gql`
+  query GetPragasByCanteiro($canteiro_id: uuid, $propriedade_id: uuid) {
+    pragas(where: {
+      _and: [
+        { propriedade_id: { _eq: $propriedade_id } },
+        { canteiro_id: { _eq: $canteiro_id } }
+      ]
+    }) {
+      id
+      lote_id
+      canteiro_id
+      setor_id
+      data
+      tipo_praga
+      metodo_controle
+      resultado
+      propriedade_id
+    }
+  }
+`;
+
+export const GET_PRAGAS_BY_SETOR = gql`
+  query GetPragasBySetor($setor_id: uuid, $propriedade_id: uuid) {
+    pragas(where: {
+      _and: [
+        { propriedade_id: { _eq: $propriedade_id } },
+        { setor_id: { _eq: $setor_id } }
+      ]
+    }) {
+      id
+      lote_id
+      canteiro_id
+      setor_id
+      data
+      tipo_praga
+      metodo_controle
+      resultado
+      propriedade_id
+    }
+  }
+`;
+
+export const INSERT_PRAGA = gql`
+  mutation InsertPraga($praga: pragas_insert_input!) {
+    insert_pragas_one(object: $praga) {
+      id
+      lote_id
+      canteiro_id
+      setor_id
+      area_tipo
+      data
+      tipo_praga
+      metodo_controle
+      resultado
+      propriedade_id
+    }
+  }
+`;
+
+// Outras operações
+export const GET_PRAGAS_OLD = gql`
+  query GetPragasOld($lote_id: uuid!) {
     pragas(where: { lote_id: { _eq: $lote_id } }) {
       id
       lote_id
@@ -349,14 +444,7 @@ export const GET_PRAGAS = gql`
   }
 `;
 
-export const INSERT_PRAGA = gql`
-  mutation InsertPraga($praga: pragas_insert_input!) {
-    insert_pragas_one(object: $praga) {
-      id
-      lote_id
-    }
-  }
-`;
+// Mutation existente foi substituída pela versão atualizada acima
 
 // Operações de Transações Financeiras
 export const GET_TRANSACOES_FINANCEIRAS = gql`

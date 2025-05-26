@@ -125,11 +125,16 @@ export interface Irrigation {
 // Pest type
 export interface Pest {
   id: string; // UUID
-  lote_id: string;
+  lote_id?: string;
+  canteiro_id?: string;
+  setor_id?: string;
+  area_tipo?: 'lote' | 'canteiro' | 'setor'; // Tipo de área
+  area_id?: string; // ID da área selecionada
   data: string;
   tipo_praga: string;
   metodo_controle: string;
   resultado: string;
+  propriedade_id?: string;
 }
 
 // Transaction type
