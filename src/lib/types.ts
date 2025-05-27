@@ -70,6 +70,7 @@ export interface Lot {
   observacao?: string; // Observações adicionais
   cultura?: Crop;
   updated_at?: string; // Data da última atualização
+  propriedade_id?: string;
 }
 
 // Crop type
