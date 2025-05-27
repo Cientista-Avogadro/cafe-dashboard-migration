@@ -480,6 +480,8 @@ export const GET_PRODUTOS_ESTOQUE = gql`
       unidade
       quantidade
       propriedade_id
+      dose_por_hectare
+      preco_unitario
     }
   }
 `;
@@ -490,6 +492,8 @@ export const INSERT_PRODUTO_ESTOQUE = gql`
       id
       nome
       propriedade_id
+      dose_por_hectare
+      preco_unitario
     }
   }
 `;
@@ -880,6 +884,49 @@ export const DELETE_CANTEIRO = gql`
   mutation DeleteCanteiro($id: uuid!) {
     delete_canteiros_by_pk(id: $id) {
       id
+    }
+  }
+`;
+
+// Operações para planejamentos_insumos (relação N:M)
+export const INSERT_PLANEJAMENTO_INSUMO = gql`
+  mutation InsertPlanejamentoInsumo($insumo: planejamentos_insumos_insert_input!) {
+    insert_planejamentos_insumos_one(object: $insumo) {
+      id
+      planejamento_id
+      produto_id
+      quantidade
+      unidade
+    }
+  }
+`;
+
+export const GET_PLANEJAMENTO_INSUMOS = gql`
+  query GetPlanejamentoInsumos($planejamento_id: uuid!) {
+    planejamentos_insumos(where: { planejamento_id: { _eq: $planejamento_id } }) {
+      id
+      planejamento_id
+      produto_id
+      quantidade
+      unidade
+      data_uso
+      observacoes
+      produto {
+        id
+        nome
+        categoria
+        unidade
+        dose_por_hectare
+        preco_unitario
+      }
+    }
+  }
+`;
+
+export const DELETE_PLANEJAMENTO_INSUMOS = gql`
+  mutation DeletePlanejamentoInsumos($planejamento_id: uuid!) {
+    delete_planejamentos_insumos(where: { planejamento_id: { _eq: $planejamento_id } }) {
+      affected_rows
     }
   }
 `;

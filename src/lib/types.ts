@@ -92,6 +92,8 @@ export interface ProductStock {
   unidade?: string;
   quantidade?: number;
   propriedade_id: string;
+  dose_por_hectare?: number; // Dose recomendada por hectare
+  preco_unitario?: number; // Preço unitário do insumo
 }
 
 // StockMovement type
@@ -163,6 +165,18 @@ export interface Canteiro {
   cultura?: Crop;
 }
 
+// PlanejamentoInsumo type (relação N:M entre planejamentos e insumos)
+export interface PlanejamentoInsumo {
+  id: string; // UUID
+  planejamento_id: string;
+  produto_id: string;
+  quantidade: number;
+  unidade?: string;
+  data_uso?: string; // Data específica para uso do insumo
+  observacoes?: string;
+  produto?: ProductStock; // Relação com o produto
+}
+
 // Planejamento (Planning) type
 export interface Planejamento {
   id: string; // UUID
@@ -177,4 +191,5 @@ export interface Planejamento {
   cultura?: Crop;
   lote?: Lot;
   canteiro?: Canteiro;
+  insumos?: PlanejamentoInsumo[]; // Relação com insumos
 }

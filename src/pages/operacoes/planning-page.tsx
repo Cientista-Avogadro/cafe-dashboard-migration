@@ -1,15 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
+
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Planejamento, Lot, Canteiro, Crop } from "@/lib/types";
+import { Planejamento, Lot, Canteiro, Crop, ProductStock } from "@/lib/types";
 import { queryClient, graphqlRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
   Button,
   Table,
   TableHeader,
@@ -26,7 +22,14 @@ import {
   TabsTrigger,
 } from "@/components/ui";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Search, Loader2, Calendar as CalendarIcon } from "lucide-react";
@@ -47,6 +50,13 @@ const planejamentoSchema = z.object({
     required_error: "Data de fim prevista é obrigatória",
   }),
   status: z.string().optional(),
+  insumos: z.array(
+    z.object({
+      produto_id: z.string().uuid("ID do produto inválido"),
+      quantidade: z.number().min(0, "Quantidade deve ser maior que zero"),
+      unidade: z.string().optional(),
+    })
+  ).optional(),
 });
 
 // Schema estendido para edição, incluindo o ID
@@ -66,6 +76,27 @@ export default function PlanningPage() {
   const [selectedTab, setSelectedTab] = useState<'lotes' | 'canteiros'>('lotes');
   const [selectedLoteId, setSelectedLoteId] = useState<string | null>(null);
   const [selectedCanteiroId, setSelectedCanteiroId] = useState<string | null>(null);
+  const [selectedInsumos, setSelectedInsumos] = useState<Array<{
+    produto_id: string;
+    nome: string;
+    quantidade: number;
+    unidade: string;
+    preco_unitario?: number;
+    custo_total?: number;
+    dose_por_hectare?: number;
+  }>>([]);
+  const [isInsumoDialogOpen, setIsInsumoDialogOpen] = useState(false);
+  const [insumoToAdd, setInsumoToAdd] = useState<{
+    produto_id: string;
+    quantidade: number;
+    unidade: string;
+    preco_unitario?: number;
+    custo_total?: number;
+    dose_por_hectare?: number;
+  }>({ produto_id: "", quantidade: 1, unidade: "" });
+  
+  // Form para o dialog de insumos (evita erro de context)
+  const insumoForm = useForm();
 
   // Query para buscar culturas para o dropdown
   const { data: culturasData } = useQuery<{ culturas: Array<{ id: string; nome: string; ciclo_estimado_dias?: number }> }>({  
@@ -123,6 +154,16 @@ export default function PlanningPage() {
         propriedade_id: user.propriedade_id 
       });
       return result;
+    },
+    enabled: !!user?.propriedade_id,
+  });
+  
+  // Query para buscar insumos (produtos em estoque) para o dropdown
+  const { data: insumosData } = useQuery<{ produtos_estoque: ProductStock[] }>({  
+    queryKey: ["produtos_estoque", user?.propriedade_id],
+    queryFn: async () => {
+      if (!user?.propriedade_id) return { produtos_estoque: [] };
+      return await graphqlRequest("GET_PRODUTOS_ESTOQUE", { propriedade_id: user.propriedade_id });
     },
     enabled: !!user?.propriedade_id,
   });
@@ -222,7 +263,32 @@ export default function PlanningPage() {
         setor_id: setor_id
       };
       
-      return await graphqlRequest("INSERT_PLANEJAMENTO", { planejamento: planejamentoData });
+      // Inserimos o planejamento
+      const result = await graphqlRequest("INSERT_PLANEJAMENTO", { planejamento: planejamentoData });
+      
+      // Verificamos se o planejamento foi criado com sucesso e tem um ID
+      if (result?.planejamento?.id && selectedInsumos.length > 0) {
+        const planejamentoId = result.planejamento.id;
+        
+        // Preparamos os dados dos insumos para inserção
+        const insumosPromises = selectedInsumos.map(insumo => {
+          const insumoData = {
+            planejamento_id: planejamentoId,
+            produto_id: insumo.produto_id,
+            quantidade: insumo.quantidade,
+            unidade: insumo.unidade,
+            observacoes: `Preço unitário: R$ ${insumo.preco_unitario?.toFixed(2) || '0.00'}`
+          };
+          
+          // Chamada para inserir cada insumo na tabela de relacionamento
+          return graphqlRequest("INSERT_PLANEJAMENTO_INSUMO", { insumo: insumoData });
+        });
+        
+        // Aguardamos todas as inserções de insumos
+        await Promise.all(insumosPromises);
+      }
+      
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["all-planejamentos"] });
@@ -315,6 +381,30 @@ export default function PlanningPage() {
         });
         
         console.log("Resposta da atualização:", response);
+        
+        // Atualizar os insumos do planejamento
+        if (selectedInsumos.length > 0) {
+          // Primeiro, excluir todos os insumos existentes para este planejamento
+          await graphqlRequest("DELETE_PLANEJAMENTO_INSUMOS", { 
+            planejamento_id: data.id 
+          });
+          
+          // Depois, inserir os novos insumos
+          const insumosPromises = selectedInsumos.map(insumo => {
+            const insumoData = {
+              planejamento_id: data.id,
+              produto_id: insumo.produto_id,
+              quantidade: insumo.quantidade,
+              unidade: insumo.unidade,
+              observacoes: `Preço unitário: R$ ${insumo.preco_unitario?.toFixed(2) || '0.00'}`
+            };
+            
+            return graphqlRequest("INSERT_PLANEJAMENTO_INSUMO", { insumo: insumoData });
+          });
+          
+          await Promise.all(insumosPromises);
+        }
+        
         return response;
       } catch (error) {
         console.error("Erro ao atualizar planejamento:", error);
@@ -353,10 +443,50 @@ export default function PlanningPage() {
     },
   });
   
-  const handleEditClick = (planejamento: Planejamento) => {
+  const handleEditClick = async (planejamento: Planejamento) => {
     setSelectedPlanejamento(planejamento);
     
     console.log("Planejamento selecionado para edição:", planejamento);
+    
+    // Limpar os insumos selecionados antes de carregar os novos
+    setSelectedInsumos([]);
+    
+    // Carregar os insumos associados a este planejamento
+    try {
+      const insumosResult = await graphqlRequest("GET_PLANEJAMENTO_INSUMOS", { 
+        planejamento_id: planejamento.id 
+      });
+      
+      console.log("Insumos carregados:", insumosResult);
+      
+      if (insumosResult?.planejamentos_insumos?.length > 0) {
+        // Converter para o formato usado pelo estado selectedInsumos
+        const insumosFormatados = insumosResult.planejamentos_insumos.map((insumo: any) => {
+          const preco_unitario = insumo.produto?.preco_unitario || 0;
+          const quantidade = insumo.quantidade || 0;
+          
+          return {
+            produto_id: insumo.produto_id,
+            nome: insumo.produto?.nome || 'Produto não encontrado',
+            quantidade: quantidade,
+            unidade: insumo.unidade || insumo.produto?.unidade || 'un',
+            preco_unitario: preco_unitario,
+            custo_total: preco_unitario * quantidade,
+            dose_por_hectare: insumo.produto?.dose_por_hectare
+          };
+        });
+        
+        // Atualizar o estado com os insumos carregados
+        setSelectedInsumos(insumosFormatados);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar insumos do planejamento:", error);
+      toast({
+        title: "Aviso",
+        description: "Não foi possível carregar os insumos associados a este planejamento.",
+        variant: "destructive"
+      });
+    }
     
     // Preparar as datas para o formulário
     const dataInicio = typeof planejamento.data_inicio === 'string' 
@@ -484,6 +614,7 @@ export default function PlanningPage() {
           <div>
             {selectedTab === 'lotes' ? (
               <select
+                aria-label="Filtrar por lote"
                 className="h-10 rounded-md border border-input bg-background px-3 py-2"
                 value={selectedLoteId || ""}
                 onChange={(e) => setSelectedLoteId(e.target.value || null)}
@@ -497,6 +628,7 @@ export default function PlanningPage() {
               </select>
             ) : (
               <select
+                aria-label="Filtrar por canteiro"
                 className="h-10 rounded-md border border-input bg-background px-3 py-2"
                 value={selectedCanteiroId || ""}
                 onChange={(e) => setSelectedCanteiroId(e.target.value || null)}
@@ -901,6 +1033,78 @@ export default function PlanningPage() {
                 )}
               />
               
+              {/* Seção de Insumos */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-medium">Insumos</h3>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => {
+                      setInsumoToAdd({ produto_id: "", quantidade: 1, unidade: "" });
+                      setIsInsumoDialogOpen(true);
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Adicionar Insumo
+                  </Button>
+                </div>
+                
+                {selectedInsumos.length === 0 ? (
+                  <div className="text-center p-4 border rounded-md bg-muted/30">
+                    <p className="text-sm text-muted-foreground">Nenhum insumo selecionado</p>
+                  </div>
+                ) : (
+                  <div className="border rounded-md">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Insumo</TableHead>
+                          <TableHead>Quantidade</TableHead>
+                          <TableHead>Unidade</TableHead>
+                          <TableHead className="w-16">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedInsumos.map((insumo, index) => (
+                          <TableRow key={index}>
+                            <TableCell>{insumo.nome}</TableCell>
+                            <TableCell>{insumo.quantidade}</TableCell>
+                            <TableCell>{insumo.unidade}</TableCell>
+                            <TableCell>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => {
+                                  setSelectedInsumos(selectedInsumos.filter((_, i) => i !== index));
+                                }}
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="24"
+                                  height="24"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className="h-4 w-4 text-red-500"
+                                >
+                                  <path d="M3 6h18"></path>
+                                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                </svg>
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+              
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                   Cancelar
@@ -927,13 +1131,7 @@ export default function PlanningPage() {
             </DialogDescription>
           </DialogHeader>
           <Form {...editForm}>
-            <form onSubmit={(e) => {
-                e.preventDefault();
-                console.log("Formulário de edição enviado");
-                const formData = editForm.getValues();
-                console.log("Dados do formulário:", formData);
-                editPlanejamentoMutation.mutate(formData);
-              }} 
+            <form onSubmit={editForm.handleSubmit(onEditSubmit)} 
               className="space-y-4">
               <input type="hidden" {...editForm.register("id")} />
               
@@ -1153,6 +1351,196 @@ export default function PlanningPage() {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para seleção de insumos */}
+      <Dialog open={isInsumoDialogOpen} onOpenChange={setIsInsumoDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Adicionar Insumo</DialogTitle>
+            <DialogDescription>
+              Selecione um insumo e a quantidade necessária para o planejamento.
+            </DialogDescription>
+          </DialogHeader>
+          {!insumosData?.produtos_estoque ? (
+            <div className="py-6 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <span className="ml-2">Carregando insumos...</span>
+            </div>
+          ) : insumosData.produtos_estoque.length === 0 ? (
+            <div className="py-6 text-center">
+              <p className="text-muted-foreground">Nenhum insumo disponível.</p>
+              <p className="text-sm mt-2">Adicione insumos na seção de Recursos.</p>
+            </div>
+          ) : (
+            <Form {...insumoForm}>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <label htmlFor="produto" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Insumo</label>
+                  <select
+                    id="produto"
+                    aria-label="Selecione um insumo"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={insumoToAdd.produto_id}
+                    onChange={(e) => {
+                      const selectedProduct = insumosData.produtos_estoque.find(p => p.id === e.target.value);
+                      if (selectedProduct) {
+                        const quantidade = insumoToAdd.quantidade;
+                        const preco = selectedProduct.preco_unitario || 0;
+                        setInsumoToAdd({
+                          produto_id: e.target.value,
+                          quantidade: quantidade,
+                          unidade: selectedProduct.unidade || "",
+                          preco_unitario: preco,
+                          custo_total: preco * quantidade,
+                          dose_por_hectare: selectedProduct.dose_por_hectare
+                        });
+                      } else {
+                        setInsumoToAdd({
+                          produto_id: e.target.value,
+                          quantidade: insumoToAdd.quantidade,
+                          unidade: ""
+                        });
+                      }
+                    }}
+                  >
+                    <option value="">Selecione um insumo</option>
+                    {insumosData.produtos_estoque.map((produto) => (
+                      <option key={produto.id} value={produto.id}>
+                        {produto.nome} {produto.unidade ? `(${produto.unidade})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label htmlFor="quantidade" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Quantidade</label>
+                    <Input
+                      id="quantidade"
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={insumoToAdd.quantidade}
+                      onChange={(e) => {
+                        const quantidade = parseFloat(e.target.value) || 0;
+                        const preco = insumoToAdd.preco_unitario || 0;
+                        setInsumoToAdd({
+                          ...insumoToAdd, 
+                          quantidade: quantidade,
+                          custo_total: preco * quantidade
+                        });
+                      }}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label htmlFor="unidade" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Unidade</label>
+                    <Input
+                      id="unidade"
+                      placeholder="ex: kg, L, un"
+                      value={insumoToAdd.unidade}
+                      onChange={(e) => setInsumoToAdd({...insumoToAdd, unidade: e.target.value})}
+                    />
+                  </div>
+                </div>
+                
+                {insumoToAdd.produto_id && (
+                  <div className="mt-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label htmlFor="preco" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Preço Unitário (AOA)</label>
+                        <Input
+                          id="preco"
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={insumoToAdd.preco_unitario || 0}
+                          onChange={(e) => {
+                            const preco = parseFloat(e.target.value) || 0;
+                            const quantidade = insumoToAdd.quantidade || 0;
+                            setInsumoToAdd({
+                              ...insumoToAdd,
+                              preco_unitario: preco,
+                              custo_total: preco * quantidade
+                            });
+                          }}
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label htmlFor="dose" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Dose por Hectare</label>
+                        <Input
+                          id="dose"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={insumoToAdd.dose_por_hectare || 0}
+                          onChange={(e) => setInsumoToAdd({...insumoToAdd, dose_por_hectare: parseFloat(e.target.value) || 0})}
+                        />
+                      </div>
+                    </div>
+                    
+                    {insumoToAdd.preco_unitario && insumoToAdd.quantidade > 0 && (
+                      <div className="p-3 bg-muted rounded-md">
+                        <p className="text-sm font-medium">Custo Total: AOA {(insumoToAdd.preco_unitario * insumoToAdd.quantidade).toFixed(2)}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Form>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsInsumoDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={!insumosData?.produtos_estoque || insumosData.produtos_estoque.length === 0}
+              onClick={() => {
+                // Adicionar insumo apenas se produto selecionado e quantidade válida
+                if (insumoToAdd.produto_id && insumoToAdd.quantidade > 0) {
+                  const produto = insumosData?.produtos_estoque?.find(p => p.id === insumoToAdd.produto_id);
+                  if (produto) {
+                    const preco_unitario = insumoToAdd.preco_unitario || produto.preco_unitario || 0;
+                    const quantidade = insumoToAdd.quantidade;
+                    const custo_total = preco_unitario * quantidade;
+                    
+                    setSelectedInsumos([
+                      ...selectedInsumos,
+                      {
+                        produto_id: insumoToAdd.produto_id,
+                        nome: produto.nome,
+                        quantidade: quantidade,
+                        unidade: insumoToAdd.unidade || produto.unidade || "un",
+                        preco_unitario: preco_unitario,
+                        custo_total: custo_total,
+                        dose_por_hectare: insumoToAdd.dose_por_hectare || produto.dose_por_hectare
+                      }
+                    ]);
+                    setIsInsumoDialogOpen(false);
+                    
+                    // Feedback visual para o usuário
+                    toast({
+                      title: "Insumo adicionado",
+                      description: `${produto.nome} foi adicionado ao planejamento.`,
+                    });
+                  }
+                } else {
+                  // Feedback de erro
+                  toast({
+                    title: "Dados incompletos",
+                    description: "Selecione um insumo e informe a quantidade.",
+                    variant: "destructive"
+                  });
+                }
+              }}
+            >
+              Adicionar
             </Button>
           </DialogFooter>
         </DialogContent>

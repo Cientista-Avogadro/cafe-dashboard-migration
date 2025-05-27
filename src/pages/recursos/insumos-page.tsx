@@ -58,7 +58,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Esquema de validação para insumo
 const insumoSchema = z.object({
@@ -66,6 +66,8 @@ const insumoSchema = z.object({
   categoria: z.string().min(2, "Categoria deve ter pelo menos 2 caracteres"),
   unidade: z.string().min(1, "Unidade é obrigatória"),
   quantidade: z.coerce.number().min(0, "Quantidade deve ser um valor positivo").default(0),
+  preco_unitario: z.coerce.number().min(0, "Preço unitário deve ser um valor positivo").optional(),
+  dose_por_hectare: z.coerce.number().min(0, "Dose por hectare deve ser um valor positivo").optional(),
   propriedade_id: z.string().uuid().optional(),
 });
 
@@ -212,6 +214,8 @@ export default function InsumosPage() {
       nome: insumo.nome,
       categoria: insumo.categoria || "",
       unidade: insumo.unidade || "",
+      preco_unitario: insumo.preco_unitario || 0,
+      dose_por_hectare: insumo.dose_por_hectare || 0,
       propriedade_id: insumo.propriedade_id,
     });
     setIsEditDialogOpen(true);
@@ -666,6 +670,42 @@ export default function InsumosPage() {
                 )}
               />
               
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={addForm.control}
+                  name="preco_unitario"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Preço Unitário (AOA)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.01" placeholder="0.00" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Preço por unidade do insumo em Kwanzas
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={addForm.control}
+                  name="dose_por_hectare"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dose por Hectare</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.01" placeholder="0.00" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Dose recomendada por hectare
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
               <DialogFooter>
                 <Button
                   type="button"
@@ -762,6 +802,42 @@ export default function InsumosPage() {
                   </FormItem>
                 )}
               />
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="preco_unitario"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Preço Unitário (AOA)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.01" placeholder="0.00" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Preço por unidade do insumo em Kwanzas
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={editForm.control}
+                  name="dose_por_hectare"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dose por Hectare</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="0.01" placeholder="0.00" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Dose recomendada por hectare
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               
               <DialogFooter>
                 <Button
