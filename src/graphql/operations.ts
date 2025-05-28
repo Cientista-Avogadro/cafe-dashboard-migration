@@ -897,6 +897,8 @@ export const INSERT_PLANEJAMENTO_INSUMO = gql`
       produto_id
       quantidade
       unidade
+      data_uso
+      observacoes
     }
   }
 `;
@@ -911,14 +913,6 @@ export const GET_PLANEJAMENTO_INSUMOS = gql`
       unidade
       data_uso
       observacoes
-      produto {
-        id
-        nome
-        categoria
-        unidade
-        dose_por_hectare
-        preco_unitario
-      }
     }
   }
 `;

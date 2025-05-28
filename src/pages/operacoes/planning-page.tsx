@@ -265,10 +265,13 @@ export default function PlanningPage() {
       
       // Inserimos o planejamento
       const result = await graphqlRequest("INSERT_PLANEJAMENTO", { planejamento: planejamentoData });
+
+      
       
       // Verificamos se o planejamento foi criado com sucesso e tem um ID
-      if (result?.planejamento?.id && selectedInsumos.length > 0) {
-        const planejamentoId = result.planejamento.id;
+      if (result?.insert_planejamentos_one?.id && selectedInsumos.length > 0) {
+       
+        const planejamentoId = result.insert_planejamentos_one.id;
         
         // Preparamos os dados dos insumos para inserção
         const insumosPromises = selectedInsumos.map(insumo => {
@@ -277,7 +280,8 @@ export default function PlanningPage() {
             produto_id: insumo.produto_id,
             quantidade: insumo.quantidade,
             unidade: insumo.unidade,
-            observacoes: `Preço unitário: R$ ${insumo.preco_unitario?.toFixed(2) || '0.00'}`
+            observacoes: `Preço unitário: R$ ${insumo.preco_unitario?.toFixed(2) || '0.00'}`,
+            data_uso: format(data.data_inicio, 'yyyy-MM-dd'),
           };
           
           // Chamada para inserir cada insumo na tabela de relacionamento
@@ -300,6 +304,9 @@ export default function PlanningPage() {
         description: "O planejamento foi adicionado com sucesso.",
       });
       addForm.reset();
+      insumoForm.reset();
+      setSelectedInsumos([]);
+      
     },
     onError: (error: any) => {
       toast({
@@ -453,31 +460,64 @@ export default function PlanningPage() {
     
     // Carregar os insumos associados a este planejamento
     try {
-      const insumosResult = await graphqlRequest("GET_PLANEJAMENTO_INSUMOS", { 
-        planejamento_id: planejamento.id 
-      });
-      
-      console.log("Insumos carregados:", insumosResult);
-      
-      if (insumosResult?.planejamentos_insumos?.length > 0) {
-        // Converter para o formato usado pelo estado selectedInsumos
-        const insumosFormatados = insumosResult.planejamentos_insumos.map((insumo: any) => {
-          const preco_unitario = insumo.produto?.preco_unitario || 0;
-          const quantidade = insumo.quantidade || 0;
-          
-          return {
-            produto_id: insumo.produto_id,
-            nome: insumo.produto?.nome || 'Produto não encontrado',
-            quantidade: quantidade,
-            unidade: insumo.unidade || insumo.produto?.unidade || 'un',
-            preco_unitario: preco_unitario,
-            custo_total: preco_unitario * quantidade,
-            dose_por_hectare: insumo.produto?.dose_por_hectare
-          };
+      try {
+        const insumosResult = await graphqlRequest("GET_PLANEJAMENTO_INSUMOS", { 
+          planejamento_id: planejamento.id 
         });
         
-        // Atualizar o estado com os insumos carregados
-        setSelectedInsumos(insumosFormatados);
+        console.log("Insumos carregados:", insumosResult);
+        
+        if (insumosResult?.planejamentos_insumos?.length > 0) {
+          // Buscar os produtos do estoque para obter informações adicionais
+          const produtosIds = insumosResult.planejamentos_insumos.map((insumo: any) => insumo.produto_id);
+          let produtosMap: Record<string, any> = {};
+          
+          try {
+            // Tentar buscar os produtos do estoque para complementar as informações
+            if (insumosData?.produtos_estoque) {
+              produtosMap = insumosData.produtos_estoque.reduce((acc: Record<string, any>, produto: any) => {
+                acc[produto.id] = produto;
+                return acc;
+              }, {});
+            }
+          } catch (err) {
+            console.warn("Não foi possível buscar informações detalhadas dos produtos", err);
+          }
+          
+          // Converter para o formato usado pelo estado selectedInsumos
+          const insumosFormatados = insumosResult.planejamentos_insumos.map((insumo: any) => {
+            const produto = produtosMap[insumo.produto_id] || {};
+            const preco_unitario = produto?.preco_unitario || 0;
+            const quantidade = insumo.quantidade || 0;
+            
+            return {
+              produto_id: insumo.produto_id,
+              nome: produto?.nome || 'Produto não encontrado',
+              quantidade: quantidade,
+              unidade: insumo.unidade || produto?.unidade || 'un',
+              preco_unitario: preco_unitario,
+              custo_total: preco_unitario * quantidade,
+              dose_por_hectare: produto?.dose_por_hectare
+            };
+          });
+          
+          // Atualizar o estado com os insumos carregados
+          setSelectedInsumos(insumosFormatados);
+        }
+      } catch (graphqlError: any) {
+        // Verifica se o erro é devido à tabela não existir no schema GraphQL
+        if (graphqlError?.message?.includes("field 'planejamentos_insumos' not found in type")) {
+          console.warn("A tabela 'planejamentos_insumos' não está configurada no GraphQL schema");
+          toast({
+            title: "Configuração Pendente",
+            description: "A tabela de insumos não está configurada no GraphQL. Os insumos não serão exibidos até que a configuração seja concluída.",
+            variant: "destructive"
+          });
+          // Continua o fluxo mesmo sem os insumos
+        } else {
+          // Re-lançar o erro para ser capturado pelo catch externo
+          throw graphqlError;
+        }
       }
     } catch (error) {
       console.error("Erro ao carregar insumos do planejamento:", error);
