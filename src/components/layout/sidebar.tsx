@@ -8,6 +8,13 @@ interface SidebarProps {
   currentPath: string;
 }
 
+interface NavItem {
+  name: string;
+  icon: string;
+  path: string;
+  submenu?: NavItem[];
+}
+
 export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: SidebarProps) {
   const { user, logoutMutation } = useAuth();
   
@@ -33,7 +40,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
   };
 
   // Define categories for navigation items
-  const navCategories = [
+  const navCategories: Array<{name: string, items: NavItem[]}> = [
     {
       name: "Principal",
       items: [
@@ -74,7 +81,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
     {
       name: "Sistema",
       items: [
-        { name: "Configurações", icon: "ri-settings-4-line", path: "/configuracoes" }
+        { name: "Configurações", icon: "ri-settings-4-line", path: "/sistema/configuracao" },
+        { name: "Usuários", icon: "ri-user-settings-line", path: "/sistema/usuarios" }
       ]
     }
   ];
@@ -104,14 +112,36 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
                   
                   <div className={`space-y-1 overflow-hidden transition-all duration-200 ${expandedCategories[category.name] ? 'max-h-96' : 'max-h-0'}`}>
                     {category.items.map((item) => (
-                      <Link 
-                        key={item.path}
-                        href={item.path}
-                        className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md hover:bg-primary/10 hover:text-primary cursor-pointer ml-4 ${isActive(item.path) ? 'bg-primary/10 text-primary' : 'text-slate-600'}`}
-                      >
-                        <i className={`${item.icon} mr-3 h-5 w-5`}></i>
-                        {item.name}
-                      </Link>
+                      <div key={item.path}>
+                        <Link 
+                          href={item.path}
+                          className={`group flex items-center justify-between px-2 py-2 text-sm font-medium rounded-md hover:bg-primary/10 hover:text-primary cursor-pointer ml-4 ${isActive(item.path) ? 'bg-primary/10 text-primary' : 'text-slate-600'}`}
+                        >
+                          <div className="flex items-center">
+                            <i className={`${item.icon} mr-3 h-5 w-5`}></i>
+                            {item.name}
+                          </div>
+                          {item.submenu && item.submenu.length > 0 && (
+                            <i className="ri-arrow-right-s-line text-slate-400"></i>
+                          )}
+                        </Link>
+                        
+                        {/* Render submenu if exists */}
+                        {item.submenu && item.submenu.length > 0 && (
+                          <div className="ml-8 space-y-1 mt-1">
+                            {item.submenu.map((subItem) => (
+                              <Link
+                                key={subItem.path}
+                                href={subItem.path}
+                                className={`group flex items-center px-2 py-2 text-xs font-medium rounded-md hover:bg-primary/10 hover:text-primary cursor-pointer ${isActive(subItem.path) ? 'bg-primary/10 text-primary' : 'text-slate-600'}`}
+                              >
+                                <i className={`${subItem.icon} mr-2 h-4 w-4`}></i>
+                                {subItem.name}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -135,6 +165,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
                 <button 
                   onClick={() => logoutMutation.mutate()}
                   className="ml-auto text-slate-500 hover:text-slate-700"
+                  aria-label="Sair da conta"
                 >
                   <i className="ri-logout-box-line"></i>
                 </button>
@@ -157,6 +188,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
               <button 
                 onClick={() => setSidebarOpen(false)}
                 className="ml-1 flex h-10 w-10 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+                aria-label="Fechar menu lateral"
               >
                 <i className="ri-close-line text-white text-2xl"></i>
               </button>
@@ -182,15 +214,38 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
                     
                     <div className={`space-y-1 overflow-hidden transition-all duration-200 ${expandedCategories[category.name] ? 'max-h-96' : 'max-h-0'}`}>
                       {category.items.map((item) => (
-                        <Link 
-                          key={item.path}
-                          href={item.path}
-                          onClick={() => setSidebarOpen(false)}
-                          className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md hover:bg-primary/10 hover:text-primary cursor-pointer ml-4 ${isActive(item.path) ? 'bg-primary/10 text-primary' : 'text-slate-600'}`}
-                        >
-                          <i className={`${item.icon} mr-3 h-5 w-5`}></i>
-                          {item.name}
-                        </Link>
+                        <div key={item.path}>
+                          <Link 
+                            href={item.path}
+                            onClick={() => setSidebarOpen(false)}
+                            className={`group flex items-center justify-between px-2 py-2 text-sm font-medium rounded-md hover:bg-primary/10 hover:text-primary cursor-pointer ml-4 ${isActive(item.path) ? 'bg-primary/10 text-primary' : 'text-slate-600'}`}
+                          >
+                            <div className="flex items-center">
+                              <i className={`${item.icon} mr-3 h-5 w-5`}></i>
+                              {item.name}
+                            </div>
+                            {item.submenu && item.submenu.length > 0 && (
+                              <i className="ri-arrow-right-s-line text-slate-400"></i>
+                            )}
+                          </Link>
+                          
+                          {/* Render submenu if exists */}
+                          {item.submenu && item.submenu.length > 0 && (
+                            <div className="ml-8 space-y-1 mt-1">
+                              {item.submenu.map((subItem) => (
+                                <Link
+                                  key={subItem.path}
+                                  href={subItem.path}
+                                  onClick={() => setSidebarOpen(false)}
+                                  className={`group flex items-center px-2 py-2 text-xs font-medium rounded-md hover:bg-primary/10 hover:text-primary cursor-pointer ${isActive(subItem.path) ? 'bg-primary/10 text-primary' : 'text-slate-600'}`}
+                                >
+                                  <i className={`${subItem.icon} mr-2 h-4 w-4`}></i>
+                                  {subItem.name}
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -215,6 +270,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
                   <button 
                     onClick={() => logoutMutation.mutate()}
                     className="ml-auto text-slate-500 hover:text-slate-700"
+                    aria-label="Sair da conta"
                   >
                     <i className="ri-logout-box-line"></i>
                   </button>

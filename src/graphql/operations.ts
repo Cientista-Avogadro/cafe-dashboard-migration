@@ -29,6 +29,70 @@ export const INSERT_PROPRIEDADE = gql`
   }
 `;
 
+export const UPDATE_PROPRIEDADE = gql`
+  mutation UpdatePropriedade($id: uuid!, $propriedade: propriedades_set_input!) {
+    update_propriedades_by_pk(pk_columns: {id: $id}, _set: $propriedade) {
+      id
+      nome
+      localizacao
+      tamanho
+      nif
+      latitude
+      longitude
+    }
+  }
+`;
+
+// Operações para configurações do sistema
+export const GET_SISTEMA_CONFIGURACAO = gql`
+  query GetSistemaConfiguracao($propriedade_id: uuid!) {
+    sistema_configuracao(where: {propriedade_id: {_eq: $propriedade_id}}) {
+      id
+      propriedade_id
+      moeda_principal
+      taxa_cambio_usd
+      taxa_cambio_eur
+      taxa_cambio_aoa
+      atualizar_cambio_automaticamente
+      unidade_area
+      tema
+      criado_em
+      atualizado_em
+    }
+  }
+`;
+
+export const UPSERT_SISTEMA_CONFIGURACAO = gql`
+  mutation UpsertSistemaConfiguracao($configuracao: sistema_configuracao_insert_input!) {
+    insert_sistema_configuracao_one(
+      object: $configuracao,
+      on_conflict: {
+        constraint: sistema_configuracao_propriedade_id_key,
+        update_columns: [
+          moeda_principal,
+          taxa_cambio_usd,
+          taxa_cambio_eur,
+          taxa_cambio_aoa,
+          atualizar_cambio_automaticamente,
+          unidade_area,
+          tema,
+          atualizado_em
+        ]
+      }
+    ) {
+      id
+      propriedade_id
+      moeda_principal
+      taxa_cambio_usd
+      taxa_cambio_eur
+      taxa_cambio_aoa
+      atualizar_cambio_automaticamente
+      unidade_area
+      tema
+    }
+  }
+`;
+
 // Operações de Usuário
 export const GET_USER_BY_EMAIL = gql`
   query GetUserByEmail($email: String!) {
@@ -37,6 +101,19 @@ export const GET_USER_BY_EMAIL = gql`
       nome
       email
       password_hash
+      propriedade_id
+      role
+      ativo
+    }
+  }
+`;
+
+export const GET_USERS = gql`
+  query GetUsers($propriedade_id: uuid!) {
+    users(where: { propriedade_id: { _eq: $propriedade_id } }) {
+      id
+      nome
+      email
       propriedade_id
       role
       ativo
@@ -53,6 +130,27 @@ export const INSERT_USER = gql`
       propriedade_id
       role
       ativo
+    }
+  }
+`;
+
+export const UPDATE_USER = gql`
+  mutation UpdateUser($id: uuid!, $user: users_set_input!) {
+    update_users_by_pk(pk_columns: { id: $id }, _set: $user) {
+      id
+      nome
+      email
+      propriedade_id
+      role
+      ativo
+    }
+  }
+`;
+
+export const DELETE_USER = gql`
+  mutation DeleteUser($id: uuid!) {
+    delete_users_by_pk(id: $id) {
+      id
     }
   }
 `;
@@ -127,20 +225,7 @@ export const GET_CULTURAS = gql`
   }
 `;
 
-export const GET_CULTURA_BY_ID = gql`
-  query GetCulturaById($id: uuid!) {
-    culturas_by_pk(id: $id) {
-      id
-      nome
-      variedade	
-      produtividade
-      inicio_epoca_plantio
-      fim_epoca_plantio
-      ciclo_estimado_dias
-      propriedade_id
-    }
-  }
-`;
+// Cleaned up old queries
 
 export const GET_CULTURAS_BY_IDS = gql`
   query GetCulturasByIds($ids: [uuid!]!) {
@@ -429,22 +514,6 @@ export const INSERT_PRAGA = gql`
     }
   }
 `;
-
-// Outras operações
-export const GET_PRAGAS_OLD = gql`
-  query GetPragasOld($lote_id: uuid!) {
-    pragas(where: { lote_id: { _eq: $lote_id } }) {
-      id
-      lote_id
-      data
-      tipo_praga
-      metodo_controle
-      resultado
-    }
-  }
-`;
-
-// Mutation existente foi substituída pela versão atualizada acima
 
 // Operações de Transações Financeiras
 export const GET_TRANSACOES_FINANCEIRAS = gql`
@@ -924,5 +993,93 @@ export const DELETE_PLANEJAMENTO_INSUMOS = gql`
     }
   }
 `;
+
+// Operação para obter detalhes completos de um planejamento específico
+export const GET_PLANEJAMENTO_BY_ID = gql`
+  query GetPlanejamentoById($id: uuid!) {
+    planejamento: planejamentos_by_pk(id: $id) {
+      id
+      propriedade_id
+      lote_id
+      canteiro_id
+      setor_id
+      cultura_id
+      data_inicio
+      data_fim_prevista
+      status
+    }
+    
+    # Obter insumos relacionados ao planejamento
+    insumos: planejamentos_insumos(where: { planejamento_id: { _eq: $id } }) {
+      id
+      planejamento_id
+      produto_id
+      quantidade
+      unidade
+      data_uso
+      observacoes
+    }
+    
+    # Obter produtos do estoque para relacionar com os insumos
+    produtos: produtos_estoque {
+      id
+      nome
+      categoria
+      unidade
+      preco_unitario
+      dose_por_hectare
+    }
+  }
+`;
+
+// Operação para obter detalhes da cultura para o planejamento
+export const GET_CULTURA_DETAILS = gql`
+  query GetCulturaDetails($id: uuid!) {
+    cultura: culturas_by_pk(id: $id) {
+      id
+      nome
+      ciclo_estimado_dias
+      variedade
+      produtividade
+    }
+  }
+`;
+
+// Operação para obter detalhes do lote
+export const GET_LOTE_DETAILS = gql`
+  query GetLoteDetails($id: uuid!) {
+    lote: lotes_by_pk(id: $id) {
+      id
+      nome
+      area
+      setor_id
+    }
+  }
+`;
+
+// Operação para obter detalhes do canteiro
+export const GET_CANTEIRO_DETAILS = gql`
+  query GetCanteiroDetails($id: uuid!) {
+    canteiro: canteiros_by_pk(id: $id) {
+      id
+      nome
+      area
+      lote_id
+    }
+  }
+`;
+
+// Operação para obter detalhes do setor
+export const GET_SETOR_DETAILS = gql`
+  query GetSetorDetails($id: uuid!) {
+    setor: setores_by_pk(id: $id) {
+      id
+      nome
+      area
+    }
+  }
+`;
+
+
 
 // Outras operações podem ser adicionadas conforme necessário

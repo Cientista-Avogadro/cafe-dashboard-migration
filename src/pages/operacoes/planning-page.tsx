@@ -38,6 +38,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
+import { PlanningDetailButton } from "@/components/planning-detail-button";
+import { useLocation } from "wouter";
 
 const planejamentoSchema = z.object({
   cultura_id: z.string().uuid("ID da cultura inválido"),
@@ -68,6 +70,7 @@ type PlanejamentoFormValues = z.infer<typeof planejamentoSchema>;
 
 export default function PlanningPage() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -557,6 +560,10 @@ export default function PlanningPage() {
     
     setIsEditDialogOpen(true);
   };
+
+  const handleRowClick = (id: string) => {
+    setLocation(`/producao/${id}`);
+  };
   
   const onEditSubmit = (data: PlanejamentoFormValues & { id: string }) => {
     console.log("Dados do formulário de edição:", data);
@@ -715,7 +722,7 @@ export default function PlanningPage() {
                     filteredPlanejamentos
                       .filter(p => p.lote_id)
                       .map((planejamento) => (
-                        <TableRow key={planejamento.id} className="cursor-pointer hover:bg-muted/50">
+                        <TableRow key={planejamento.id} onClick={() => handleRowClick(planejamento.id)} className="cursor-pointer hover:bg-muted/50">
                           <TableCell>{planejamento.lote?.nome || "Não definido"}</TableCell>
                           <TableCell>{planejamento.cultura?.nome || "Não definido"}</TableCell>
                           <TableCell>{format(typeof planejamento.data_inicio === 'string' ? parseISO(planejamento.data_inicio) : planejamento.data_inicio, "dd/MM/yyyy", { locale: pt })}</TableCell>
@@ -817,7 +824,7 @@ export default function PlanningPage() {
                     filteredPlanejamentos
                       .filter(p => p.canteiro_id)
                       .map((planejamento) => (
-                        <TableRow key={planejamento.id} className="cursor-pointer hover:bg-muted/50">
+                        <TableRow key={planejamento.id} onClick={() => handleRowClick(planejamento.id)} className="cursor-pointer hover:bg-muted/50">
                           <TableCell>{planejamento.canteiro?.nome || "Não definido"}</TableCell>
                           <TableCell>{planejamento.cultura?.nome || "Não definido"}</TableCell>
                           <TableCell>{format(typeof planejamento.data_inicio === 'string' ? parseISO(planejamento.data_inicio) : planejamento.data_inicio, "dd/MM/yyyy", { locale: pt })}</TableCell>

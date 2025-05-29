@@ -20,6 +20,7 @@ import CanteiroDetailsPage from "@/pages/area-plantio/canteiro-details-page";
 
 // Operações
 import PlanningPage from "@/pages/operacoes/planning-page";
+import PlanningDetailsPage from "@/pages/operacoes/planning-details-page";
 
 // Recursos
 import InsumosPage from "@/pages/recursos/insumos-page";
@@ -29,6 +30,8 @@ import EstoquePage from "@/pages/recursos/estoque-page";
 import ModulePage from "@/pages/sistema/module-page";
 import IrrigationPage from "./pages/operacoes/irrigation-page";
 import PestPage from "./pages/operacoes/pest-page";
+import ConfigPage from "./pages/sistema/configuracao";
+import UsersPage from "./pages/sistema/usuarios";
 
 function Router() {
   return (
@@ -44,13 +47,16 @@ function Router() {
       <ProtectedRoute path="/canteiros" component={CanteirosPage} />
       <ProtectedRoute path="/canteiros/:id" component={CanteiroDetailsPage} />
       <ProtectedRoute path="/producao" component={PlanningPage} />
+      <ProtectedRoute path="/producao/:id" component={PlanningDetailsPage} />
       <ProtectedRoute path="/insumos" component={InsumosPage} />
       <ProtectedRoute path="/irrigacao" component={IrrigationPage} />
       <ProtectedRoute path="/pragas" component={PestPage} />
       <ProtectedRoute path="/financeiro" component={() => <ModulePage title="Financeiro" icon="ri-money-dollar-circle-line" />} />
       <ProtectedRoute path="/estoque" component={EstoquePage} />
       <ProtectedRoute path="/relatorios" component={() => <ModulePage title="Relatórios" icon="ri-bar-chart-2-line" />} />
-      <ProtectedRoute path="/configuracoes" component={() => <ModulePage title="Configurações" icon="ri-settings-4-line" />} />
+      <ProtectedRoute path="/sistema" component={ConfigPage} />
+      <ProtectedRoute path="/sistema/configuracao" component={ConfigPage} />
+      <ProtectedRoute path="/sistema/usuarios" component={UsersPage} />
       <Route component={NotFound} />
     </Switch>
   );

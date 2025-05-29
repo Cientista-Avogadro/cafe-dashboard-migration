@@ -80,6 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (user.password_hash !== btoa(credentials.password)) {
         throw new Error("Senha incorreta");
       }
+      // Verificar se o usuário está ativo
+      if (!user.ativo) {
+        throw new Error("Usuário desativado. Entre em contato com o administrador.");
+      }
       const { password_hash, ...userWithoutPassword } = user;
       return userWithoutPassword;
     },
