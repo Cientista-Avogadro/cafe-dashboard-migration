@@ -1,3 +1,4 @@
+import { lazy } from 'react';
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -27,11 +28,12 @@ import InsumosPage from "@/pages/recursos/insumos-page";
 import EstoquePage from "@/pages/recursos/estoque-page";
 
 // Sistema
-import ModulePage from "@/pages/sistema/module-page";
 import IrrigationPage from "./pages/operacoes/irrigation-page";
 import PestPage from "./pages/operacoes/pest-page";
 import ConfigPage from "./pages/sistema/configuracao";
 import UsersPage from "./pages/sistema/usuarios";
+import RelatoriosPage from './pages/gestao/relatorios-page';
+import FinanceiroPage from './pages/gestao/financeiro-page';
 
 function Router() {
   return (
@@ -51,9 +53,9 @@ function Router() {
       <ProtectedRoute path="/insumos" component={InsumosPage} />
       <ProtectedRoute path="/irrigacao" component={IrrigationPage} />
       <ProtectedRoute path="/pragas" component={PestPage} />
-      <ProtectedRoute path="/financeiro" component={() => <ModulePage title="Financeiro" icon="ri-money-dollar-circle-line" />} />
+      <ProtectedRoute path="/financeiro" component={FinanceiroPage} />
       <ProtectedRoute path="/estoque" component={EstoquePage} />
-      <ProtectedRoute path="/relatorios" component={() => <ModulePage title="Relatórios" icon="ri-bar-chart-2-line" />} />
+      <ProtectedRoute path="/relatorios" component={RelatoriosPage} />
       <ProtectedRoute path="/sistema" component={ConfigPage} />
       <ProtectedRoute path="/sistema/configuracao" component={ConfigPage} />
       <ProtectedRoute path="/sistema/usuarios" component={UsersPage} />
