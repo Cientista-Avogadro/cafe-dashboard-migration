@@ -19,6 +19,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 
 // Schema for transaction form
 const transactionSchema = z.object({
+  id: z.string().optional(),
   tipo: z.enum(["entrada", "saida"]),
   valor: z.coerce.number().min(0.01, "O valor deve ser maior que zero"),
   descricao: z.string().min(1, "A descrição é obrigatória"),
@@ -31,18 +32,38 @@ type TransactionFormValues = z.infer<typeof transactionSchema>;
 // Categorias de transações
 const categorias = {
   entrada: [
-    'Venda de produtos',
+    'Venda de produtos agrícolas',
+    'Venda de animais',
     'Serviços agrícolas',
-    'Subsídios',
+    'Subsídios governamentais',
+    'Investimentos',
+    'Empréstimos',
+    'Doações',
+    'Reembolsos',
+    'Juros e rendimentos',
     'Outras receitas'
   ],
   saida: [
-    'Insumos',
-    'Mão de obra',
-    'Equipamentos',
-    'Manutenção',
-    'Energia e água',
-    'Outras despesas'
+    'Insumos agrícolas',
+    'Sementes e mudas',
+    'Fertilizantes',
+    'Defensivos agrícolas',
+    'Combustíveis e lubrificantes',
+    'Manutenção de equipamentos',
+    'Mão de obra temporária',
+    'Salários fixos',
+    'Encargos trabalhistas',
+    'Aluguel de equipamentos',
+    'Energia elétrica',
+    'Água e esgoto',
+    'Telecomunicações',
+    'Transporte e frete',
+    'Impostos e taxas',
+    'Seguros',
+    'Assistência técnica',
+    'Treinamentos e capacitações',
+    'Material de escritório',
+    'Outras despesas operacionais'
   ]
 };
 
@@ -82,7 +103,7 @@ export default function FinanceiroPage() {
   const addTransactionMutation = useMutation({
     mutationFn: async (values: TransactionFormValues) => {
       if (!user?.propriedade_id) throw new Error("ID da propriedade não encontrado");
-      
+
       const result = await graphqlRequest(
         "INSERT_TRANSACAO_FINANCEIRA",
         {
@@ -92,7 +113,7 @@ export default function FinanceiroPage() {
           },
         }
       );
-      
+
       return result;
     },
     onSuccess: () => {
@@ -113,8 +134,8 @@ export default function FinanceiroPage() {
     },
   });
 
-  const transactions = transactionsData?.transacoes_financeiras || [];
-  
+  const transactions: TransactionFormValues[] = transactionsData?.transacoes_financeiras || [];
+
   const saldoAtual = transactions.reduce((acc, tx) => {
     return tx.tipo === 'entrada' ? acc + tx.valor : acc - tx.valor;
   }, 0);
@@ -128,8 +149,8 @@ export default function FinanceiroPage() {
     .reduce((acc, tx) => acc + tx.valor, 0);
 
   const formatCurrency = (value: number) => {
-    return value.toLocaleString('pt-AO', { 
-      style: 'currency', 
+    return value.toLocaleString('pt-AO', {
+      style: 'currency',
       currency: 'AOA',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
@@ -140,10 +161,10 @@ export default function FinanceiroPage() {
     const header = 'Data,Tipo,Categoria,Descrição,Valor (AOA)\n';
     const rows = transactions
       .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
-      .map(tx => 
+      .map(tx =>
         `${tx.data},${tx.tipo === 'entrada' ? 'Receita' : 'Despesa'},${tx.categoria},${tx.descricao},${tx.valor.toLocaleString('pt-AO')}`
       ).join('\n');
-    
+
     const csvContent = "\uFEFF" + header + rows;
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -291,12 +312,10 @@ export default function FinanceiroPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Saldo Atual</CardTitle>
-            <span className="h-4 w-4 text-muted-foreground">AOA</span>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${
-              saldoAtual >= 0 ? 'text-green-600' : 'text-red-600'
-            }`}>
+            <div className={`text-2xl font-bold ${saldoAtual >= 0 ? 'text-green-600' : 'text-red-600'
+              }`}>
               {formatCurrency(saldoAtual)}
             </div>
           </CardContent>
@@ -304,7 +323,6 @@ export default function FinanceiroPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Receitas (Mensal)</CardTitle>
-            <span className="h-4 w-4 text-muted-foreground">AOA</span>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
@@ -315,7 +333,6 @@ export default function FinanceiroPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Despesas (Mensal)</CardTitle>
-            <span className="h-4 w-4 text-muted-foreground">AOA</span>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
@@ -325,8 +342,8 @@ export default function FinanceiroPage() {
         </Card>
       </div>
 
-      <Tabs 
-        defaultValue="transacoes" 
+      <Tabs
+        defaultValue="transacoes"
         className="space-y-4"
         onValueChange={setActiveTab}
       >
@@ -378,12 +395,11 @@ export default function FinanceiroPage() {
                                 {transacao.categoria}
                               </span>
                             </td>
-                            <td 
-                              className={`px-6 py-4 text-right font-medium ${
-                                transacao.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'
-                              }`}
+                            <td
+                              className={`px-6 py-4 text-right font-medium ${transacao.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'
+                                }`}
                             >
-                              {transacao.tipo === 'entrada' ? '+' : '-'} 
+                              {transacao.tipo === 'entrada' ? '+' : '-'}
                               {formatCurrency(transacao.valor)}
                             </td>
                           </tr>
