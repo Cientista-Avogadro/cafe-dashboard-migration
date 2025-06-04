@@ -6,18 +6,37 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, PlusCircle, FileText, PieChart, BarChart3, X, Save } from 'lucide-react';
+import { Download, PlusCircle, FileText, PieChart, BarChart3, X, Save, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { graphqlRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+
+// Schema for transaction form
+const transactionSchema = z.object({
+  tipo: z.enum(["entrada", "saida"]),
+  valor: z.coerce.number().min(0.01, "O valor deve ser maior que zero"),
+  descricao: z.string().min(1, "A descrição é obrigatória"),
+  data: z.string().min(1, "A data é obrigatória"),
+  categoria: z.string().min(1, "A categoria é obrigatória"),
+});
+
+type TransactionFormValues = z.infer<typeof transactionSchema>;
 
 // Categorias de transações
 const categorias = {
-  receita: [
+  entrada: [
     'Venda de produtos',
     'Serviços agrícolas',
     'Subsídios',
     'Outras receitas'
   ],
-  despesa: [
+  saida: [
     'Insumos',
     'Mão de obra',
     'Equipamentos',
@@ -27,170 +46,102 @@ const categorias = {
   ]
 };
 
-// Dados de exemplo - substituir por chamadas à API real
-const useSampleData = () => {
-  const [data, setData] = useState({
-    transacoes: [
-      { id: 1, tipo: 'receita', categoria: 'Venda de produtos', valor: 1500000, data: '2025-05-15', descricao: 'Venda de alface' },
-      { id: 2, tipo: 'despesa', categoria: 'Insumos', valor: 250000, data: '2025-05-10', descricao: 'Compra de adubo' },
-      { id: 3, tipo: 'despesa', categoria: 'Mão de obra', valor: 350000, data: '2025-05-05', descricao: 'Pagamento de funcionários' },
-      { id: 4, tipo: 'receita', categoria: 'Venda de produtos', valor: 1200000, data: '2025-04-28', descricao: 'Venda de tomate' },
-    ]
-  });
-
-  const saldoAtual = data.transacoes.reduce((acc, tx) => {
-    return tx.tipo === 'receita' ? acc + tx.valor : acc - tx.valor;
-  }, 0);
-
-  const receitasMensal = data.transacoes
-    .filter(tx => tx.tipo === 'receita' && new Date(tx.data).getMonth() === new Date().getMonth())
-    .reduce((acc, tx) => acc + tx.valor, 0);
-
-  const despesasMensal = data.transacoes
-    .filter(tx => tx.tipo === 'despesa' && new Date(tx.data).getMonth() === new Date().getMonth())
-    .reduce((acc, tx) => acc + tx.valor, 0);
-
-  const adicionarTransacao = (novaTransacao) => {
-    const novaTransacaoCompleta = {
-      ...novaTransacao,
-      id: Math.max(0, ...data.transacoes.map(t => t.id)) + 1,
-      data: new Date().toISOString().split('T')[0]
-    };
-    
-    setData(prev => ({
-      ...prev,
-      transacoes: [...prev.transacoes, novaTransacaoCompleta]
-    }));
-  };
-
-  return {
-    ...data,
-    saldoAtual,
-    receitasMensal,
-    despesasMensal,
-    adicionarTransacao
-  };
-};
-
-// Componente do formulário de transação
-const FormularioTransacao = ({ onSave, onCancel }) => {
-  const [formData, setFormData] = useState({
-    tipo: 'receita',
-    categoria: '',
-    valor: '',
-    descricao: '',
-    data: new Date().toISOString().split('T')[0]
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSave({
-      ...formData,
-      valor: Number(formData.valor)
-    });
-    onCancel();
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="tipo">Tipo</Label>
-          <Select 
-            value={formData.tipo}
-            onValueChange={(value) => setFormData({...formData, tipo: value, categoria: ''})}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione o tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="receita">Receita</SelectItem>
-              <SelectItem value="despesa">Despesa</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="categoria">Categoria</Label>
-          <Select 
-            value={formData.categoria}
-            onValueChange={(value) => setFormData({...formData, categoria: value})}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione a categoria" />
-            </SelectTrigger>
-            <SelectContent>
-              {categorias[formData.tipo].map((cat) => (
-                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="valor">Valor (AOA)</Label>
-        <Input 
-          id="valor" 
-          type="number" 
-          value={formData.valor}
-          onChange={(e) => setFormData({...formData, valor: e.target.value})}
-          placeholder="0,00" 
-          required 
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="data">Data</Label>
-        <Input 
-          id="data" 
-          type="date" 
-          value={formData.data}
-          onChange={(e) => setFormData({...formData, data: e.target.value})}
-          required 
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="descricao">Descrição</Label>
-        <Textarea 
-          id="descricao" 
-          value={formData.descricao}
-          onChange={(e) => setFormData({...formData, descricao: e.target.value})}
-          placeholder="Adicione detalhes sobre esta transação" 
-          rows={3} 
-        />
-      </div>
-
-      <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          <X className="mr-2 h-4 w-4" /> Cancelar
-        </Button>
-        <Button type="submit">
-          <Save className="mr-2 h-4 w-4" /> Salvar
-        </Button>
-      </div>
-    </form>
-  );
-};
-
 export default function FinanceiroPage() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('transacoes');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const {
-    transacoes,
-    saldoAtual,
-    receitasMensal,
-    despesasMensal,
-    adicionarTransacao
-  } = useSampleData();
+
+  // Query to fetch transactions
+  const { data: transactionsData, isLoading } = useQuery({
+    queryKey: ["transacoes", user?.propriedade_id],
+    queryFn: async () => {
+      if (!user?.propriedade_id) return { transacoes_financeiras: [] };
+      return await graphqlRequest(
+        "GET_TRANSACOES_FINANCEIRAS",
+        { propriedade_id: user.propriedade_id }
+      );
+    },
+    enabled: !!user?.propriedade_id,
+  });
+
+  // Form for adding transactions
+  const form = useForm<TransactionFormValues>({
+    resolver: zodResolver(transactionSchema),
+    defaultValues: {
+      tipo: "entrada",
+      valor: 0,
+      descricao: "",
+      data: new Date().toISOString().split('T')[0],
+      categoria: "",
+    },
+  });
+
+  // Mutation to add transaction
+  const addTransactionMutation = useMutation({
+    mutationFn: async (values: TransactionFormValues) => {
+      if (!user?.propriedade_id) throw new Error("ID da propriedade não encontrado");
+      
+      const result = await graphqlRequest(
+        "INSERT_TRANSACAO_FINANCEIRA",
+        {
+          transacao: {
+            ...values,
+            propriedade_id: user.propriedade_id,
+          },
+        }
+      );
+      
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transacoes"] });
+      setIsDialogOpen(false);
+      form.reset();
+      toast({
+        title: "Transação registrada",
+        description: "A transação foi registrada com sucesso.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro ao registrar transação",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const transactions = transactionsData?.transacoes_financeiras || [];
+  
+  const saldoAtual = transactions.reduce((acc, tx) => {
+    return tx.tipo === 'entrada' ? acc + tx.valor : acc - tx.valor;
+  }, 0);
+
+  const receitasMensal = transactions
+    .filter(tx => tx.tipo === 'entrada' && new Date(tx.data).getMonth() === new Date().getMonth())
+    .reduce((acc, tx) => acc + tx.valor, 0);
+
+  const despesasMensal = transactions
+    .filter(tx => tx.tipo === 'saida' && new Date(tx.data).getMonth() === new Date().getMonth())
+    .reduce((acc, tx) => acc + tx.valor, 0);
+
+  const formatCurrency = (value: number) => {
+    return value.toLocaleString('pt-AO', { 
+      style: 'currency', 
+      currency: 'AOA',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
 
   const handleExport = () => {
     const header = 'Data,Tipo,Categoria,Descrição,Valor (AOA)\n';
-    const rows = transacoes
+    const rows = transactions
       .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
       .map(tx => 
-        `${tx.data},${tx.tipo === 'receita' ? 'Receita' : 'Despesa'},${tx.categoria},${tx.descricao},${tx.valor.toLocaleString('pt-AO')}`
+        `${tx.data},${tx.tipo === 'entrada' ? 'Receita' : 'Despesa'},${tx.categoria},${tx.descricao},${tx.valor.toLocaleString('pt-AO')}`
       ).join('\n');
     
     const csvContent = "\uFEFF" + header + rows;
@@ -202,19 +153,6 @@ export default function FinanceiroPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const formatCurrency = (value: number) => {
-    return value.toLocaleString('pt-AO', { 
-      style: 'currency', 
-      currency: 'AOA',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  };
-
-  const handleNovaTransacao = (transacao) => {
-    adicionarTransacao(transacao);
   };
 
   return (
@@ -237,10 +175,113 @@ export default function FinanceiroPage() {
               <DialogHeader>
                 <DialogTitle>Nova Transação</DialogTitle>
               </DialogHeader>
-              <FormularioTransacao 
-                onSave={handleNovaTransacao}
-                onCancel={() => setIsDialogOpen(false)}
-              />
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit((data) => addTransactionMutation.mutate(data))} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="tipo"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tipo*</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o tipo" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="entrada">Entrada</SelectItem>
+                            <SelectItem value="saida">Saída</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="categoria"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Categoria*</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione a categoria" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {categorias[form.watch("tipo")].map((cat) => (
+                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="valor"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Valor (AOA)*</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="0.01" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="data"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Data*</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="descricao"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Descrição*</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                      <X className="mr-2 h-4 w-4" /> Cancelar
+                    </Button>
+                    <Button type="submit" disabled={addTransactionMutation.isPending}>
+                      {addTransactionMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="mr-2 h-4 w-4" /> Salvar
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
             </DialogContent>
           </Dialog>
         </div>
@@ -298,9 +339,9 @@ export default function FinanceiroPage() {
         <TabsContent value="transacoes" className="space-y-4">
           <Card>
             <CardContent className="p-0">
-              <div className="relative overflow-x-auto">
+              <div className="relative overflow-x-auto max-h-[calc(100vh-400px)] overflow-y-auto">
                 <table className="w-full text-sm text-left">
-                  <thead className="text-xs uppercase bg-muted">
+                  <thead className="text-xs uppercase bg-muted sticky top-0">
                     <tr>
                       <th className="px-6 py-3">Data</th>
                       <th className="px-6 py-3">Descrição</th>
@@ -309,31 +350,45 @@ export default function FinanceiroPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {transacoes
-                      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
-                      .map((transacao) => (
-                        <tr key={transacao.id} className="border-t">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {new Date(transacao.data).toLocaleDateString('pt-AO')}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="font-medium">{transacao.descricao}</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="px-2 py-1 text-xs rounded-full bg-muted">
-                              {transacao.categoria}
-                            </span>
-                          </td>
-                          <td 
-                            className={`px-6 py-4 text-right font-medium ${
-                              transacao.tipo === 'receita' ? 'text-green-600' : 'text-red-600'
-                            }`}
-                          >
-                            {transacao.tipo === 'receita' ? '+' : '-'} 
-                            {formatCurrency(transacao.valor)}
-                          </td>
-                        </tr>
-                      ))}
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-4 text-center">
+                          <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                        </td>
+                      </tr>
+                    ) : transactions.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-4 text-center text-muted-foreground">
+                          Nenhuma transação encontrada
+                        </td>
+                      </tr>
+                    ) : (
+                      transactions
+                        .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+                        .map((transacao) => (
+                          <tr key={transacao.id} className="border-t">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {new Date(transacao.data).toLocaleDateString('pt-AO')}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="font-medium">{transacao.descricao}</div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="px-2 py-1 text-xs rounded-full bg-muted">
+                                {transacao.categoria}
+                              </span>
+                            </td>
+                            <td 
+                              className={`px-6 py-4 text-right font-medium ${
+                                transacao.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'
+                              }`}
+                            >
+                              {transacao.tipo === 'entrada' ? '+' : '-'} 
+                              {formatCurrency(transacao.valor)}
+                            </td>
+                          </tr>
+                        ))
+                    )}
                   </tbody>
                 </table>
               </div>
