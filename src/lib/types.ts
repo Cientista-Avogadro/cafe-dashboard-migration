@@ -127,17 +127,16 @@ export interface Irrigation {
 
 // Pest type
 export interface Pest {
-  id: string; // UUID
+  id: string;
+  propriedade_id: string;
   lote_id?: string;
   canteiro_id?: string;
   setor_id?: string;
-  area_tipo?: 'lote' | 'canteiro' | 'setor'; // Tipo de área
-  area_id?: string; // ID da área selecionada
+  tipo_area?: string;
   data: string;
   tipo_praga: string;
   metodo_controle: string;
-  resultado: string;
-  propriedade_id?: string;
+  resultado: "Em andamento" | "Resolvida" | "Parcial" | "Não resolvida";
 }
 
 // Transaction type
@@ -193,4 +192,32 @@ export interface Planejamento {
   lote?: Lot;
   canteiro?: Canteiro;
   insumos?: PlanejamentoInsumo[]; // Relação com insumos
+}
+
+// PragaProduto type
+export interface PragaProduto {
+  id?: string;
+  praga_id?: string;
+  produto_id: string;
+  quantidade_utilizada: number;
+  data_aplicacao: string;
+  observacoes: string;
+}
+
+// Produto type
+export interface Produto {
+  id: string;
+  nome: string;
+  unidade_medida: string;
+  quantidade: number;
+  categoria: string;
+}
+
+// Tratamento type
+export interface Tratamento {
+  id: string;
+  produto_id: string;
+  quantidade_utilizada: number;
+  data_aplicacao: string;
+  observacoes: string;
 }

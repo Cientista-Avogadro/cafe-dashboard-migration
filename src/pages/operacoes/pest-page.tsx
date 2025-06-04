@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Pest, Lot, Sector, Canteiro } from "@/lib/types";
+import { Pest, Lot, Sector, Canteiro, PragaProduto, Produto } from "@/lib/types";
 import { graphqlRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
@@ -30,6 +30,8 @@ import {
   Search,
   Plus,
   Loader2,
+  Pencil,
+  SprayCan,
 } from "lucide-react";
 import {
   Select,
@@ -57,22 +59,22 @@ import {
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 // Schema for pest occurrence
 const pestSchema = z.object({
   lote_id: z.string().uuid("ID do lote inválido").optional(),
   canteiro_id: z.string().uuid("ID do canteiro inválido").optional(),
-  setor_id: z.string().uuid("ID do setor inválido").optional(),
   data: z.string().min(1, "Data é obrigatória"),
   tipo_praga: z.string().min(1, "Tipo de praga é obrigatório"),
   metodo_controle: z.string().min(1, "Método de controle é obrigatório"),
   resultado: z.string().min(1, "Resultado é obrigatório"),
 }).refine(data => {
-  // Verifica se pelo menos um dos campos de área está preenchido
-  return !!(data.lote_id || data.canteiro_id || data.setor_id);
+  return !!(data.lote_id || data.canteiro_id);
 }, {
-  message: "Pelo menos um tipo de área (lote, canteiro ou setor) deve ser selecionado",
-  path: ["lote_id"], // Mostra a mensagem no campo lote_id
+  message: "Pelo menos um tipo de área (lote ou canteiro) deve ser selecionado",
+  path: ["lote_id"],
 });
 
 type PestFormValues = z.infer<typeof pestSchema>;
@@ -81,9 +83,10 @@ export default function PestPage() {
   const { user } = useAuth();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedAreaType, setSelectedAreaType] = useState<"lote" | "canteiro" | "setor" | null>(null);
+  const [selectedAreaType, setSelectedAreaType] = useState<"lote" | "canteiro" | null>(null);
   const [selectedAreaId, setSelectedAreaId] = useState<string>("-1");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [pestToEdit, setPestToEdit] = useState<Pest | null>(null);
 
   // Query to fetch lots
   const { data: lotesData } = useQuery<{ lotes: Lot[] }>({  
@@ -95,15 +98,7 @@ export default function PestPage() {
     enabled: !!user?.propriedade_id,
   });
   
-  // Query to fetch sectors
-  const { data: setoresData } = useQuery<{ setores: Sector[] }>({  
-    queryKey: ["setores", user?.propriedade_id],
-    queryFn: async () => {
-      if (!user?.propriedade_id) return { setores: [] };
-      return await graphqlRequest("GET_SETORES", { propriedade_id: user.propriedade_id });
-    },
-    enabled: !!user?.propriedade_id,
-  });
+
   
   // Query to fetch beds (canteiros)
   const { data: canteirosData } = useQuery<{ canteiros: Canteiro[] }>({  
@@ -111,6 +106,18 @@ export default function PestPage() {
     queryFn: async () => {
       if (!user?.propriedade_id) return { canteiros: [] };
       return await graphqlRequest("GET_CANTEIROS", { propriedade_id: user.propriedade_id });
+    },
+    enabled: !!user?.propriedade_id,
+  });
+
+  // Query to fetch products
+  const { data: produtosData } = useQuery<{ produtos_estoque: Produto[] }>({  
+    queryKey: ["produtos", user?.propriedade_id],
+    queryFn: async () => {
+      if (!user?.propriedade_id) return { produtos_estoque: [] };
+      return await graphqlRequest("GET_PRODUTOS_ESTOQUE", { 
+        propriedade_id: user.propriedade_id 
+      });
     },
     enabled: !!user?.propriedade_id,
   });
@@ -150,16 +157,6 @@ export default function PestPage() {
           // Filtrar apenas os que têm canteiro_id
           response.pragas = response.pragas.filter((item: Pest) => !!item.canteiro_id);
           return response;
-          
-        } else if (selectedAreaType === "setor") {
-          console.log("Filtrando por todos os setores");
-          // Buscar todas as pragas da propriedade e filtrar no frontend
-          const response = await graphqlRequest("GET_PRAGAS", { 
-            propriedade_id: user.propriedade_id 
-          });
-          // Filtrar apenas os que têm setor_id
-          response.pragas = response.pragas.filter((item: Pest) => !!item.setor_id);
-          return response;
         }
       } else {
         // Filtrar por área específica
@@ -175,12 +172,6 @@ export default function PestPage() {
             propriedade_id: user.propriedade_id,
             canteiro_id: selectedAreaId
           });
-        } else if (selectedAreaType === "setor" && selectedAreaId) {
-          console.log("Filtrando por setor_id:", selectedAreaId);
-          return await graphqlRequest("GET_PRAGAS_BY_SETOR", { 
-            propriedade_id: user.propriedade_id,
-            setor_id: selectedAreaId
-          });
         }
       }
       
@@ -195,48 +186,70 @@ export default function PestPage() {
   // Mutation to add pest occurrence
   const addPestMutation = useMutation({
     mutationFn: async (data: PestFormValues) => {
-      // IMPORTANTE: Enviar apenas o campo de área relevante, sem incluir os outros campos
-      // (nem mesmo como nulos) para respeitar a restrição do banco de dados
-      let pestData: any = {
-        data: data.data,
-        tipo_praga: data.tipo_praga,
-        metodo_controle: data.metodo_controle,
-        resultado: data.resultado,
-        propriedade_id: user?.propriedade_id,
-        area_tipo: undefined // Será definido abaixo
-      };
-      
-      // Criar um novo objeto com apenas o campo de área relevante
-      if (data.lote_id) {
-        pestData.area_tipo = "lote";
-        pestData.lote_id = data.lote_id;
-        // NÃO incluir canteiro_id ou setor_id, nem mesmo como undefined ou null
-      } else if (data.canteiro_id) {
-        pestData.area_tipo = "canteiro";
-        pestData.canteiro_id = data.canteiro_id;
-        // NÃO incluir lote_id ou setor_id, nem mesmo como undefined ou null
-      } else if (data.setor_id) {
-        pestData.area_tipo = "setor";
-        pestData.setor_id = data.setor_id;
-        // NÃO incluir lote_id ou canteiro_id, nem mesmo como undefined ou null
+      if (pestToEdit) {
+        // Atualizar praga existente
+        return await graphqlRequest("UPDATE_PRAGA", {
+          id: pestToEdit.id,
+          updates: data
+        });
+      } else {
+        // Criar nova praga
+        let pestData: any = {
+          data: data.data,
+          tipo_praga: data.tipo_praga,
+          metodo_controle: data.metodo_controle,
+          resultado: data.resultado,
+          propriedade_id: user?.propriedade_id,
+        };
+        
+        if (data.lote_id) {
+          pestData.tipo_area = "lote";
+          pestData.lote_id = data.lote_id;
+        } else if (data.canteiro_id) {
+          pestData.tipo_area = "canteiro";
+          pestData.canteiro_id = data.canteiro_id;
+        }
+        
+        return await graphqlRequest("INSERT_PRAGA", { praga: pestData });
       }
-      
-      console.log("Dados adaptados para envio:", pestData);
-      return await graphqlRequest("INSERT_PRAGA", { praga: pestData });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pragas"] });
       setIsAddDialogOpen(false);
+      setPestToEdit(null);
       toast({
-        title: "Ocorrência registrada",
-        description: "A ocorrência de praga foi registrada com sucesso.",
+        title: pestToEdit ? "Praga atualizada" : "Ocorrência registrada",
+        description: pestToEdit 
+          ? "A ocorrência de praga foi atualizada com sucesso." 
+          : "A ocorrência de praga foi registrada com sucesso.",
       });
       addForm.reset();
     },
     onError: (error) => {
       toast({
         title: "Erro",
-        description: `Erro ao registrar ocorrência: ${error.message}`,
+        description: `Erro ao ${pestToEdit ? 'atualizar' : 'registrar'} ocorrência: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation to update pest status
+  const updatePestStatusMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return await graphqlRequest("UPDATE_PRAGA_STATUS", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pragas"] });
+      toast({
+        title: "Sucesso",
+        description: "Status da praga atualizado com sucesso!",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro",
+        description: `Erro ao atualizar status da praga: ${error.message}`,
         variant: "destructive",
       });
     },
@@ -248,7 +261,6 @@ export default function PestPage() {
     defaultValues: {
       lote_id: undefined,
       canteiro_id: undefined,
-      setor_id: undefined,
       data: new Date().toISOString().split('T')[0],
       tipo_praga: "",
       metodo_controle: "",
@@ -256,35 +268,38 @@ export default function PestPage() {
     },
   });
 
+  useEffect(() => {
+    if (pestToEdit) {
+      addForm.reset({
+        lote_id: pestToEdit.lote_id || undefined,
+        canteiro_id: pestToEdit.canteiro_id || undefined,
+        data: pestToEdit.data.split('T')[0],
+        tipo_praga: pestToEdit.tipo_praga,
+        metodo_controle: pestToEdit.metodo_controle,
+        resultado: pestToEdit.resultado,
+      });
+    }
+  }, [pestToEdit]);
+
   // Common pest types
   const pestTypes = [
-    "Lagarta",
-    "Pulgão",
-    "Ácaro",
-    "Mosca-branca",
-    "Cochonilha",
-    "Percevejo",
-    "Broca",
-    "Formiga",
-    "Outro"
+    "Pulgão", "Lagarta", "Mosca-branca", "Ácaro", "Cochonilha",
+    "Tripes", "Broca", "Nematóide", "Fungos", "Bactérias", "Vírus"
   ];
 
   // Control methods
   const controlMethods = [
-    "Biológico",
-    "Químico",
-    "Cultural",
-    "Mecânico",
-    "Integrado",
-    "Outro"
+    "Inseticida orgânico", "Inseticida químico", "Controle biológico",
+    "Armadilhas", "Barreiras físicas", "Rotação de culturas",
+    "Práticas culturais", "Resistência genética"
   ];
 
   // Results
   const results = [
-    "Efetivo",
-    "Parcial",
-    "Inefetivo",
-    "Em andamento"
+    "Em andamento",          // controle ainda está a ser feito
+    "Resolvida",             // praga foi controlada com sucesso
+    "Parcial",               // controle teve algum efeito, mas não total
+    "Não resolvida"          // controle falhou
   ];
 
   // Filter based on search term and status
@@ -292,13 +307,15 @@ export default function PestPage() {
     // Search filter
     const matchesSearch = searchTerm === "" || 
       pest.tipo_praga.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      pest.metodo_controle.toLowerCase().includes(searchTerm.toLowerCase());
+      pest.metodo_controle.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      pest.resultado.toLowerCase().includes(searchTerm.toLowerCase());
     
     // Status filter
     const matchesStatus = statusFilter === "all" || 
-      (statusFilter === "resolvido" && pest.resultado.includes("Controle completo")) ||
-      (statusFilter === "parcial" && pest.resultado.includes("Controle parcial")) ||
-      (statusFilter === "pendente" && pest.resultado.includes("Sem controle"));
+      (statusFilter === "resolvido" && pest.resultado === "Resolvida") ||
+      (statusFilter === "parcial" && pest.resultado === "Parcial") ||
+      (statusFilter === "pendente" && pest.resultado === "Em andamento") ||
+      (statusFilter === "falha" && pest.resultado === "Não resolvida");
     
     return matchesSearch && matchesStatus;
   });
@@ -306,8 +323,231 @@ export default function PestPage() {
   // Calculate statistics
   const statistics = {
     totalOccurrences: filteredPests?.length || 0,
-    effectiveControl: filteredPests?.filter(p => p.resultado === "Efetivo").length || 0,
-    ongoingCases: filteredPests?.filter(p => p.resultado === "Em andamento").length || 0,
+    resolved: filteredPests?.filter(p => p.resultado === "Resolvida").length || 0,
+    partial: filteredPests?.filter(p => p.resultado === "Parcial").length || 0,
+    ongoing: filteredPests?.filter(p => p.resultado === "Em andamento").length || 0,
+    failed: filteredPests?.filter(p => p.resultado === "Não resolvida").length || 0,
+  };
+
+  // State for treatment modal
+  const [openTreatmentModal, setOpenTreatmentModal] = useState(false);
+  const [selectedPest, setSelectedPest] = useState<Pest | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Query to fetch treatments
+  const { data: tratamentosData } = useQuery<{ praga_produtos: PragaProduto[] }>({
+    queryKey: ["tratamentos", selectedPest?.id],
+    queryFn: async () => {
+      if (!selectedPest?.id) return { praga_produtos: [] };
+      return await graphqlRequest("GET_TRATAMENTOS", { praga_id: selectedPest.id });
+    },
+    enabled: !!selectedPest?.id,
+  });
+
+  // Function to open treatment modal
+  const openTreatment = (pest: Pest) => {
+    setSelectedPest(pest);
+    setOpenTreatmentModal(true);
+  };
+
+  // State for products used in treatment
+  const [usedProducts, setUsedProducts] = useState<PragaProduto[]>([]);
+  const [currentProduct, setCurrentProduct] = useState<PragaProduto>({
+    produto_id: "",
+    quantidade_utilizada: 0,
+    data_aplicacao: new Date().toISOString().split('T')[0],
+    observacoes: ""
+  });
+
+  // Function to add a product
+  const addProduct = () => {
+    if (currentProduct.produto_id && currentProduct.quantidade_utilizada > 0) {
+      // Get product stock information
+      const selectedProduct = produtosData?.produtos_estoque.find(
+        p => p.id === currentProduct.produto_id
+      );
+
+      if (!selectedProduct) {
+        toast({
+          title: "Erro",
+          description: "Produto não encontrado no estoque.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Check if there's enough stock
+      const existingProductIndex = usedProducts.findIndex(
+        product => product.produto_id === currentProduct.produto_id
+      );
+
+      let totalQuantityUsed = currentProduct.quantidade_utilizada;
+      
+      // If updating existing product, subtract its current quantity from total
+      if (existingProductIndex !== -1) {
+        totalQuantityUsed = currentProduct.quantidade_utilizada;
+      } else {
+        // If adding new product, add to existing quantities
+        const otherProductsQuantity = usedProducts
+          .filter(p => p.produto_id === currentProduct.produto_id)
+          .reduce((sum, p) => sum + p.quantidade_utilizada, 0);
+        totalQuantityUsed += otherProductsQuantity;
+      }
+
+      if (totalQuantityUsed > selectedProduct.quantidade) {
+        toast({
+          title: "Estoque insuficiente",
+          description: `Quantidade disponível: ${selectedProduct.quantidade} ${selectedProduct.unidade_medida}. Quantidade solicitada: ${totalQuantityUsed} ${selectedProduct.unidade_medida}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (existingProductIndex !== -1) {
+        // Update existing product
+        const updatedProducts = [...usedProducts];
+        updatedProducts[existingProductIndex] = {
+          ...currentProduct,
+          id: usedProducts[existingProductIndex].id
+        };
+        setUsedProducts(updatedProducts);
+        
+        toast({
+          title: "Produto atualizado",
+          description: "O produto foi atualizado no tratamento.",
+        });
+      } else {
+        // Add new product
+        setUsedProducts([...usedProducts, {...currentProduct}]);
+        toast({
+          title: "Produto adicionado",
+          description: "Produto adicionado ao tratamento com sucesso.",
+        });
+      }
+
+      // Reset form
+      setCurrentProduct({
+        produto_id: "",
+        quantidade_utilizada: 0,
+        data_aplicacao: new Date().toISOString().split('T')[0],
+        observacoes: ""
+      });
+    }
+  };
+
+  // Function to remove a product
+  const removeProduct = (index: number) => {
+    const updatedProducts = [...usedProducts];
+    updatedProducts.splice(index, 1);
+    setUsedProducts(updatedProducts);
+  };
+
+  const editPest = (pest: Pest) => {
+    setPestToEdit(pest);
+    setIsAddDialogOpen(true);
+  };
+
+  const saveTreatment = async () => {
+    if (!selectedPest) return;
+
+    try {
+      setIsSaving(true);
+      
+      // Update pest status to 'andamento'
+      await updatePestStatusMutation.mutateAsync({
+        id: selectedPest.id,
+        status: "Em andamento"
+      });
+
+      // Save each product used in the treatment
+      for (const product of usedProducts) {
+        // Get product info
+        const produtoInfo = produtosData?.produtos_estoque.find(p => p.id === product.produto_id);
+        if (!produtoInfo) continue;
+
+        // Save the product usage
+        await graphqlRequest("INSERT_PRAGA_PRODUTO", {
+          praga_produto: {
+            praga_id: selectedPest.id,
+            produto_id: product.produto_id,
+            quantidade_utilizada: product.quantidade_utilizada,
+            data_aplicacao: product.data_aplicacao,
+            observacoes: product.observacoes
+          }
+        });
+
+        // Update stock quantity
+        const novaQuantidade = Math.max(0, produtoInfo.quantidade - product.quantidade_utilizada);
+        await graphqlRequest("UPDATE_PRODUTO_ESTOQUE", {
+          id: product.produto_id,
+          produto: { quantidade: novaQuantidade }
+        });
+
+        // Register stock movement
+        await graphqlRequest("INSERT_MOVIMENTACAO_ESTOQUE", {
+          movimentacao: {
+            produto_id: product.produto_id,
+            tipo: "saida",
+            quantidade: product.quantidade_utilizada,
+            data: product.data_aplicacao,
+            descricao: `Uso no tratamento de praga: ${selectedPest.tipo_praga}`
+          }
+        });
+      }
+      
+      toast({
+        title: "Sucesso",
+        description: "Tratamento registrado com sucesso!",
+      });
+      
+      setOpenTreatmentModal(false);
+      setUsedProducts([]);
+      queryClient.invalidateQueries({ queryKey: ["tratamentos"] });
+      queryClient.invalidateQueries({ queryKey: ["produtos_estoque"] });
+      
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Ocorreu um erro ao registrar o tratamento. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Update usedProducts when tratamentosData changes
+  useEffect(() => {
+    if (tratamentosData?.praga_produtos) {
+      setUsedProducts(tratamentosData.praga_produtos);
+    }
+  }, [tratamentosData]);
+
+  // Function to finalize treatment
+  const finalizeTreatment = async () => {
+    if (!selectedPest || selectedPest.resultado === "Resolvida") return;
+
+    try {
+      setIsSaving(true);
+      await updatePestStatusMutation.mutateAsync({
+        id: selectedPest.id,
+        status: "Resolvida"
+      });
+      toast({
+        title: "Sucesso",
+        description: "Tratamento finalizado com sucesso!",
+      });
+      setOpenTreatmentModal(false);
+      queryClient.invalidateQueries({ queryKey: ["pragas"] });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao finalizar tratamento.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -345,7 +585,7 @@ export default function PestPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {statistics.effectiveControl}
+              {statistics.resolved}
             </div>
           </CardContent>
         </Card>
@@ -358,7 +598,7 @@ export default function PestPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-600">
-              {statistics.ongoingCases}
+              {statistics.ongoing}
             </div>
           </CardContent>
         </Card>
@@ -389,7 +629,7 @@ export default function PestPage() {
               <span className="text-sm font-medium">Filtrar por:</span>
               <Select
                 value={selectedAreaType || "todas"}
-                onValueChange={(value: "todas" | "lote" | "canteiro" | "setor") => {
+                onValueChange={(value: "todas" | "lote" | "canteiro") => {
                   console.log("Valor selecionado:", value);
                   if (value === "todas") {
                     setSelectedAreaType(null);
@@ -408,7 +648,6 @@ export default function PestPage() {
                   <SelectItem value="todas">Todos</SelectItem>
                   <SelectItem value="lote">Lote</SelectItem>
                   <SelectItem value="canteiro">Canteiro</SelectItem>
-                  <SelectItem value="setor">Setor</SelectItem>
                 </SelectContent>
               </Select>
               
@@ -443,22 +682,6 @@ export default function PestPage() {
                   </SelectContent>
                 </Select>
               )}
-              
-              {selectedAreaType === "setor" && (
-                <Select value={selectedAreaId} onValueChange={setSelectedAreaId}>
-                  <SelectTrigger className="w-[250px]">
-                    <SelectValue placeholder="Selecione um setor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="-1">Todos os setores</SelectItem>
-                    {setoresData?.setores?.filter(setor => !!setor.id).map((setor: Sector) => (
-                      <SelectItem key={setor.id} value={setor.id}>
-                        {setor.nome || `Setor ${setor.id.substring(0, 8)}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
             </div>
             
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -470,6 +693,7 @@ export default function PestPage() {
                 <SelectItem value="resolvido">Resolvido</SelectItem>
                 <SelectItem value="parcial">Parcial</SelectItem>
                 <SelectItem value="pendente">Pendente</SelectItem>
+                <SelectItem value="falha">Falha</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -495,6 +719,7 @@ export default function PestPage() {
                     <TableHead>Tipo de Praga</TableHead>
                     <TableHead>Método de Controle</TableHead>
                     <TableHead>Resultado</TableHead>
+                    <TableHead>Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -508,15 +733,53 @@ export default function PestPage() {
                       <TableCell>
                         <Badge
                           variant={
-                            pest.resultado === "Efetivo"
+                            pest.resultado === "Resolvida"
                               ? "default"
-                              : pest.resultado === "Em andamento"
+                              : pest.resultado === "Parcial"
                               ? "secondary"
-                              : "outline"
+                              : pest.resultado === "Em andamento"
+                              ? "outline"
+                              : "destructive"
                           }
                         >
                           {pest.resultado}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex space-x-2">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  size="icon" 
+                                  variant="outline"
+                                  onClick={() => openTreatment(pest)}
+                                >
+                                  <SprayCan className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Tratar</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  size="icon" 
+                                  variant="outline"
+                                  onClick={() => editPest(pest)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Editar</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -531,124 +794,80 @@ export default function PestPage() {
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Registrar Ocorrência de Praga</DialogTitle>
+            <DialogTitle>{pestToEdit ? "Editar Ocorrência de Praga" : "Registrar Ocorrência de Praga"}</DialogTitle>
             <DialogDescription>
-              Registre uma nova ocorrência de praga e seu método de controle
+              {pestToEdit ? "Atualize os detalhes da ocorrência de praga" : "Registre uma nova ocorrência de praga e seu método de controle"}
             </DialogDescription>
           </DialogHeader>
           <Form {...addForm}>
             <form onSubmit={addForm.handleSubmit((data) => addPestMutation.mutate(data))} className="space-y-4">
-              <FormField
-                control={addForm.control}
-                name="lote_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Lote</FormLabel>
-                    <Select 
-                      onValueChange={(value) => {
-                        field.onChange(value);
-                        // Limpar outros campos de área quando este for selecionado
-                        if (value) {
-                          addForm.setValue("canteiro_id", undefined);
-                          addForm.setValue("setor_id", undefined);
-                        }
-                      }} 
-                      value={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um lote" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {lotesData?.lotes?.filter(lote => !!lote.id).map((lote: Lot) => (
-                          <SelectItem key={lote.id} value={lote.id}>
-                            {lote.nome || `Lote ${lote.id.substring(0, 8)}`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={addForm.control}
-                name="canteiro_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Canteiro</FormLabel>
-                    <Select 
-                      onValueChange={(value) => {
-                        field.onChange(value);
-                        // Limpar outros campos de área quando este for selecionado
-                        if (value) {
-                          addForm.setValue("lote_id", undefined);
-                          addForm.setValue("setor_id", undefined);
-                        }
-                      }} 
-                      value={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um canteiro" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {canteirosData?.canteiros?.filter(canteiro => !!canteiro.id).map((canteiro: Canteiro) => (
-                          <SelectItem key={canteiro.id} value={canteiro.id}>
-                            {canteiro.nome || `Canteiro ${canteiro.id.substring(0, 8)}`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={addForm.control}
-                name="setor_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Setor</FormLabel>
-                    <Select 
-                      onValueChange={(value) => {
-                        field.onChange(value);
-                        // Limpar outros campos de área quando este for selecionado
-                        if (value) {
-                          addForm.setValue("lote_id", undefined);
-                          addForm.setValue("canteiro_id", undefined);
-                        }
-                      }} 
-                      value={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um setor" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {setoresData?.setores?.filter(setor => !!setor.id).map((setor: Sector) => (
-                          <SelectItem key={setor.id} value={setor.id}>
-                            {setor.nome || `Setor ${setor.id.substring(0, 8)}`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <Tabs defaultValue="lote" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="lote">Lote</TabsTrigger>
+                  <TabsTrigger value="canteiro">Canteiro</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="lote">
+                  <FormField
+                    control={addForm.control}
+                    name="lote_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Lote</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o Lote" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {lotesData?.lotes?.map((lote) => (
+                              <SelectItem key={lote.id} value={lote.id}>
+                                {lote.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </TabsContent>
+                
+                <TabsContent value="canteiro">
+                  <FormField
+                    control={addForm.control}
+                    name="canteiro_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Canteiro</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o Canteiro" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {canteirosData?.canteiros?.map((canteiro) => (
+                              <SelectItem key={canteiro.id} value={canteiro.id}>
+                                {canteiro.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </TabsContent>
+              </Tabs>
               
               <FormField
                 control={addForm.control}
                 name="data"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Data*</FormLabel>
+                    <FormLabel>Data da Ocorrência</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
                     </FormControl>
@@ -662,7 +881,7 @@ export default function PestPage() {
                 name="tipo_praga"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tipo de Praga*</FormLabel>
+                    <FormLabel>Tipo de Praga</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -687,7 +906,7 @@ export default function PestPage() {
                 name="metodo_controle"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Método de Controle*</FormLabel>
+                    <FormLabel>Método de Controle</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -712,7 +931,7 @@ export default function PestPage() {
                 name="resultado"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Resultado*</FormLabel>
+                    <FormLabel>Resultado</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -733,25 +952,196 @@ export default function PestPage() {
               />
               
               <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsAddDialogOpen(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button 
-                  type="submit"
-                  disabled={addPestMutation.isPending}
-                >
-                  {addPestMutation.isPending && (
+                <Button type="submit" disabled={addPestMutation.isPending}>
+                  {addPestMutation.isPending ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
+                  ) : null}
                   Registrar Ocorrência
                 </Button>
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Treatment Modal */}
+      <Dialog open={openTreatmentModal} onOpenChange={setOpenTreatmentModal}>
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Registrar Tratamento</DialogTitle>
+            <DialogDescription>
+              {selectedPest && (
+                <div className="mt-2 space-y-1">
+                  <p className="text-sm font-medium">Praga: {selectedPest.tipo_praga}</p>
+                  <p className="text-sm text-muted-foreground">Método: {selectedPest.metodo_controle}</p>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="mt-6 space-y-6 overflow-y-auto pr-2">
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium">Adicionar Produto ao Tratamento</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-1">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Produto</label>
+                  <Select 
+                    value={currentProduct.produto_id}
+                    onValueChange={(value) => {
+                      const selectedProduct = produtosData?.produtos_estoque.find(p => p.id === value);
+                      setCurrentProduct({
+                        ...currentProduct, 
+                        produto_id: value,
+                        quantidade_utilizada: 0
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um produto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {produtosData?.produtos_estoque.map(produto => (
+                        <SelectItem key={produto.id} value={produto.id}>
+                          {produto.nome} ({produto.quantidade} {produto.unidade_medida})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {currentProduct.produto_id && (
+                    <p className="text-sm text-muted-foreground">
+                      Estoque disponível: {
+                        produtosData?.produtos_estoque.find(p => p.id === currentProduct.produto_id)?.quantidade
+                      } {
+                        produtosData?.produtos_estoque.find(p => p.id === currentProduct.produto_id)?.unidade_medida
+                      }
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Quantidade</label>
+                  <div className="flex items-center gap-2">
+                    <Input 
+                      type="number" 
+                      min="0"
+                      placeholder="Quantidade utilizada"
+                      value={currentProduct.quantidade_utilizada}
+                      onChange={(e) => setCurrentProduct({...currentProduct, quantidade_utilizada: parseFloat(e.target.value)})}
+                    />
+                    {currentProduct.produto_id && (
+                      <span className="text-sm text-muted-foreground whitespace-nowrap">
+                        {produtosData?.produtos_estoque.find(p => p.id === currentProduct.produto_id)?.unidade_medida}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Data de Aplicação</label>
+                  <Input 
+                    type="date"
+                    value={currentProduct.data_aplicacao}
+                    onChange={(e) => setCurrentProduct({...currentProduct, data_aplicacao: e.target.value})}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Observações</label>
+                  <Input
+                    placeholder="Observações sobre o tratamento"
+                    value={currentProduct.observacoes}
+                    onChange={(e) => setCurrentProduct({...currentProduct, observacoes: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button 
+                  onClick={addProduct}
+                  disabled={!currentProduct.produto_id || currentProduct.quantidade_utilizada <= 0}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Adicionar Produto
+                </Button>
+              </div>
+            </div>
+            
+            {usedProducts.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium">Produtos Adicionados</h3>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Produto</TableHead>
+                        <TableHead>Quantidade</TableHead>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Observações</TableHead>
+                        <TableHead className="w-[100px]">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {usedProducts.map((product, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">
+                            {produtosData?.produtos_estoque.find(p => p.id === product.produto_id)?.nome}
+                          </TableCell>
+                          <TableCell>{product.quantidade_utilizada}</TableCell>
+                          <TableCell>{format(new Date(product.data_aplicacao), "dd/MM/yyyy")}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">
+                            {product.observacoes || "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => removeProduct(index)}
+                            >
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Remover
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter className="mt-6 pt-4 border-t">
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setOpenTreatmentModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={saveTreatment} 
+                disabled={isSaving || usedProducts.length === 0}
+              >
+                {isSaving ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Salvar Tratamento
+              </Button>
+              {selectedPest?.resultado !== "Resolvida" && (
+                <Button 
+                  variant="default"
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={finalizeTreatment}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  Finalizar Tratamento
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

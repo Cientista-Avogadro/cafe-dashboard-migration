@@ -505,12 +505,38 @@ export const INSERT_PRAGA = gql`
       lote_id
       canteiro_id
       setor_id
-      area_tipo
+      tipo_area
       data
       tipo_praga
       metodo_controle
       resultado
       propriedade_id
+    }
+  }
+`;
+
+export const UPDATE_PRAGA = gql`
+  mutation UpdatePraga($id: uuid!, $updates: pragas_set_input!) {
+    update_pragas_by_pk(pk_columns: { id: $id }, _set: $updates) {
+      id
+      lote_id
+      canteiro_id
+      setor_id
+      tipo_area
+      data
+      tipo_praga
+      metodo_controle
+      resultado
+      propriedade_id
+    }
+  }
+`;
+
+export const UPDATE_PRAGA_STATUS = gql`
+  mutation UpdatePragaStatus($id: uuid!, $status: String!) {
+    update_pragas_by_pk(pk_columns: { id: $id }, _set: { resultado: $status }) {
+      id
+      resultado
     }
   }
 `;
@@ -573,6 +599,18 @@ export const UPDATE_PRODUTO_ESTOQUE = gql`
       id
       nome
       propriedade_id
+    }
+  }
+`;
+
+export const GET_PRODUTOS = gql`
+  query GetProdutos {
+    produtos_estoque {
+      id
+      nome
+      unidade_medida
+      quantidade
+      categoria
     }
   }
 `;
@@ -1080,6 +1118,30 @@ export const GET_SETOR_DETAILS = gql`
   }
 `;
 
+// Operação para obter tratamentos
+export const GET_TRATAMENTOS = gql`
+  query GetTratamentos($praga_id: uuid!) {
+    praga_produtos(where: {praga_id: {_eq: $praga_id}}) {
+      id
+      produto_id
+      quantidade_utilizada
+      data_aplicacao
+      observacoes
+    }
+  }
+`;
 
+export const INSERT_PRAGA_PRODUTO = gql`
+  mutation InsertPragaProduto($praga_produto: praga_produtos_insert_input!) {
+    insert_praga_produtos_one(object: $praga_produto) {
+      id
+      praga_id
+      produto_id
+      quantidade_utilizada
+      data_aplicacao
+      observacoes
+    }
+  }
+`;
 
 // Outras operações podem ser adicionadas conforme necessário
