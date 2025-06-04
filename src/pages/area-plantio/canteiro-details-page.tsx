@@ -21,6 +21,8 @@ import {
 import { ArrowLeft, MapPin, Calendar, Droplets, Bug, LineChart, Edit, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { PestList } from "@/components/pest-list";
+import { IrrigationList } from "@/components/irrigation-list";
 
 // Função para inicializar o Leaflet no lado do cliente
 const initLeaflet = () => {
@@ -292,109 +294,21 @@ export default function CanteiroDetailsPage() {
             </TabsContent>
 
             {/* Aba de Irrigações */}
-            <TabsContent value="irrigation" className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-medium">Histórico de Irrigações</h3>
-                <Button size="sm">
-                  Registrar Irrigação
-                </Button>
-              </div>
-
-              {irrigationData.length > 0 ? (
-                <div className="rounded-md border">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Volume (L)</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Método</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {irrigationData.map((item) => (
-                        <tr key={item.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {format(new Date(item.data), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.volume_agua}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.metodo}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <div className="flex gap-2">
-                              <Button variant="ghost" size="sm">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  Nenhum registro de irrigação encontrado.
-                </div>
-              )}
+            <TabsContent value="irrigation">
+              <IrrigationList 
+                areaId={id!} 
+                areaType="canteiro" 
+                areaName={canteiro?.nome || "Canteiro"} 
+              />
             </TabsContent>
 
             {/* Aba de Pragas */}
             <TabsContent value="pests" className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-medium">Histórico de Pragas</h3>
-                <Button size="sm">
-                  Registrar Ocorrência
-                </Button>
-              </div>
-
-              {pestData.length > 0 ? (
-                <div className="rounded-md border">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Controle</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resultado</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {pestData.map((item) => (
-                        <tr key={item.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {format(new Date(item.data), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.tipo_praga}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.metodo_controle}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <Badge variant={item.resultado === "Efetivo" ? "default" : "outline"}>
-                              {item.resultado}
-                            </Badge>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <div className="flex gap-2">
-                              <Button variant="ghost" size="sm">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  Nenhum registro de pragas encontrado.
-                </div>
-              )}
+              <PestList 
+                areaId={id} 
+                areaType="canteiro" 
+                areaName={canteiro.nome} 
+              />
             </TabsContent>
 
             {/* Aba de Colheitas */}

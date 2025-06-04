@@ -1,9 +1,7 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Sector, Lot, Canteiro } from "@/lib/types";
 import { graphqlRequest } from "@/lib/queryClient";
-import { queryClient } from "@/lib/queryClient";
-import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
 
@@ -57,8 +55,8 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-// Schema for irrigation record
-const irrigationSchema = z.discriminatedUnion('tipo_area', [
+// Schema for harvest record
+const harvestSchema = z.discriminatedUnion('tipo_area', [
   // Schema para lote
   z.object({
     tipo_area: z.literal("lote"),
@@ -66,8 +64,11 @@ const irrigationSchema = z.discriminatedUnion('tipo_area', [
     canteiro_id: z.string().optional(),
     setor_id: z.string().optional(),
     data: z.string().min(1, "Data é obrigatória"),
-    volume_agua: z.coerce.number().min(0.1, "Volume deve ser maior que zero"),
-    metodo: z.string().min(1, "Método é obrigatório"),
+    quantidade_colhida: z.coerce.number().min(0.1, "Quantidade deve ser maior que zero"),
+    unidade: z.string().min(1, "Unidade é obrigatória"),
+    destino: z.string().min(1, "Destino é obrigatório"),
+    observacoes: z.string().optional(),
+    cultura_id: z.string().uuid("Cultura é obrigatória"),
   }),
   // Schema para canteiro
   z.object({
@@ -76,8 +77,11 @@ const irrigationSchema = z.discriminatedUnion('tipo_area', [
     canteiro_id: z.string().uuid("ID do canteiro inválido"),
     setor_id: z.string().optional(),
     data: z.string().min(1, "Data é obrigatória"),
-    volume_agua: z.coerce.number().min(0.1, "Volume deve ser maior que zero"),
-    metodo: z.string().min(1, "Método é obrigatório"),
+    quantidade_colhida: z.coerce.number().min(0.1, "Quantidade deve ser maior que zero"),
+    unidade: z.string().min(1, "Unidade é obrigatória"),
+    destino: z.string().min(1, "Destino é obrigatório"),
+    observacoes: z.string().optional(),
+    cultura_id: z.string().uuid("Cultura é obrigatória"),
   }),
   // Schema para setor
   z.object({
@@ -86,34 +90,37 @@ const irrigationSchema = z.discriminatedUnion('tipo_area', [
     canteiro_id: z.string().optional(),
     setor_id: z.string().uuid("ID do setor inválido"),
     data: z.string().min(1, "Data é obrigatória"),
-    volume_agua: z.coerce.number().min(0.1, "Volume deve ser maior que zero"),
-    metodo: z.string().min(1, "Método é obrigatório"),
+    quantidade_colhida: z.coerce.number().min(0.1, "Quantidade deve ser maior que zero"),
+    unidade: z.string().min(1, "Unidade é obrigatória"),
+    destino: z.string().min(1, "Destino é obrigatório"),
+    observacoes: z.string().optional(),
+    cultura_id: z.string().uuid("Cultura é obrigatória"),
   }),
 ]);
 
 // Interfaces
-interface IrrigationRecord {
+interface HarvestRecord {
   id: string;
   lote_id?: string;
   canteiro_id?: string;
   setor_id?: string;
   data: string;
-  volume_agua: number;
-  metodo: string;
+  quantidade_colhida: number;
+  unidade: string;
+  destino: string;
+  observacoes?: string;
+  cultura_id: string;
   propriedade_id?: string;
 }
 
-// Removido IrrigationSubmitData pois não é mais utilizado
+type HarvestFormValues = z.infer<typeof harvestSchema>;
 
-type IrrigationFormValues = z.infer<typeof irrigationSchema>;
-
-export default function IrrigationPage() {
+export default function HarvestPage() {
   const { user } = useAuth();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAreaType, setSelectedAreaType] = useState<"lote" | "canteiro" | "setor" | null>(null);
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
-  const [dateFilter, setDateFilter] = useState<string>("all");
 
   // Query to fetch sectors
   const { data: setoresData } = useQuery<{ setores: Sector[] }>({
@@ -145,15 +152,15 @@ export default function IrrigationPage() {
     enabled: !!user?.propriedade_id,
   });
 
-  // Query to fetch irrigation data
-  const { data: irrigationData, isLoading } = useQuery<{ irrigacoes: IrrigationRecord[] }>({
-    queryKey: ["irrigacoes", user?.propriedade_id, selectedAreaId, selectedAreaType],
+  // Query to fetch harvest data
+  const { data: harvestData, isLoading } = useQuery<{ colheitas: HarvestRecord[] }>({
+    queryKey: ["colheitas", user?.propriedade_id, selectedAreaId, selectedAreaType],
     queryFn: async () => {
-      if (!user?.propriedade_id) return { irrigacoes: [] };
+      if (!user?.propriedade_id) return { colheitas: [] };
       
-      // Se não tiver tipo de área selecionado ou estiver visualizando todas as irrigações
+      // Se não tiver tipo de área selecionado ou estiver visualizando todas as colheitas
       if (!selectedAreaType || (selectedAreaId === "-1" && !selectedAreaType)) {
-        return await graphqlRequest("GET_IRRIGACOES", { 
+        return await graphqlRequest("GET_COLHEITAS", { 
           propriedade_id: user.propriedade_id 
         });
       } 
@@ -163,183 +170,84 @@ export default function IrrigationPage() {
         // Exibir todos os itens do tipo selecionado
         if (selectedAreaType === "lote") {
           console.log("Filtrando por todos os lotes");
-          // Buscar todas as irrigações da propriedade e filtrar no frontend
-          const response = await graphqlRequest("GET_IRRIGACOES", { 
+          // Buscar todas as colheitas da propriedade e filtrar no frontend
+          const response = await graphqlRequest("GET_COLHEITAS", { 
             propriedade_id: user.propriedade_id 
           });
           // Filtrar apenas os que têm lote_id
-          response.irrigacoes = response.irrigacoes.filter((item: IrrigationRecord) => !!item.lote_id);
+          response.colheitas = response.colheitas.filter((item: HarvestRecord) => !!item.lote_id);
           return response;
           
         } else if (selectedAreaType === "canteiro") {
           console.log("Filtrando por todos os canteiros");
-          // Buscar todas as irrigações da propriedade e filtrar no frontend
-          const response = await graphqlRequest("GET_IRRIGACOES", { 
+          // Buscar todas as colheitas da propriedade e filtrar no frontend
+          const response = await graphqlRequest("GET_COLHEITAS", { 
             propriedade_id: user.propriedade_id 
           });
           // Filtrar apenas os que têm canteiro_id
-          response.irrigacoes = response.irrigacoes.filter((item: IrrigationRecord) => !!item.canteiro_id);
+          response.colheitas = response.colheitas.filter((item: HarvestRecord) => !!item.canteiro_id);
           return response;
           
         } else if (selectedAreaType === "setor") {
           console.log("Filtrando por todos os setores");
-          // Buscar todas as irrigações da propriedade e filtrar no frontend
-          const response = await graphqlRequest("GET_IRRIGACOES", { 
+          // Buscar todas as colheitas da propriedade e filtrar no frontend
+          const response = await graphqlRequest("GET_COLHEITAS", { 
             propriedade_id: user.propriedade_id 
           });
           // Filtrar apenas os que têm setor_id
-          response.irrigacoes = response.irrigacoes.filter((item: IrrigationRecord) => !!item.setor_id);
+          response.colheitas = response.colheitas.filter((item: HarvestRecord) => !!item.setor_id);
           return response;
         }
       } else {
         // Filtrar por item específico
         if (selectedAreaType === "lote" && selectedAreaId) {
           console.log("Filtrando por lote_id:", selectedAreaId);
-          return await graphqlRequest("GET_IRRIGACOES_BY_LOTE", { 
+          return await graphqlRequest("GET_COLHEITAS_BY_LOTE", { 
             propriedade_id: user.propriedade_id,
             lote_id: selectedAreaId
           });
         } else if (selectedAreaType === "canteiro" && selectedAreaId) {
           console.log("Filtrando por canteiro_id:", selectedAreaId);
-          return await graphqlRequest("GET_IRRIGACOES_BY_CANTEIRO", { 
+          return await graphqlRequest("GET_COLHEITAS_BY_CANTEIRO", { 
             propriedade_id: user.propriedade_id,
             canteiro_id: selectedAreaId
           });
         } else if (selectedAreaType === "setor" && selectedAreaId) {
           console.log("Filtrando por setor_id:", selectedAreaId);
-          return await graphqlRequest("GET_IRRIGACOES_BY_SETOR", { 
+          return await graphqlRequest("GET_COLHEITAS_BY_SETOR", { 
             propriedade_id: user.propriedade_id,
             setor_id: selectedAreaId
           });
         }
       }
       
-      // Caso contrário, retornamos todas as irrigações
-      return await graphqlRequest("GET_IRRIGACOES", { 
+      // Caso contrário, retornamos todas as colheitas
+      return await graphqlRequest("GET_COLHEITAS", { 
         propriedade_id: user.propriedade_id 
       });
     },
     enabled: !!user?.propriedade_id,
   });
 
-  console.log("irrigationData", irrigationData);
-
-  // Mutation to add irrigation record
-  const addIrrigationMutation = useMutation({
-    mutationFn: async (data: IrrigationFormValues) => {
-      // Preparar os dados para envio
-      const { tipo_area } = data;
-      
-      // Criar objeto com os campos comuns
-      const baseData = {
-        data: data.data,
-        volume_agua: data.volume_agua,
-        metodo: data.metodo,
-        propriedade_id: user?.propriedade_id || undefined
-      };
-      
-      // Criar objeto para envio incluindo APENAS o campo relevante
-      let dataToSubmit: any;
-      
-      if (tipo_area === "lote") {
-        dataToSubmit = {
-          ...baseData,
-          lote_id: data.lote_id,
-          // Não incluir canteiro_id ou setor_id
-        };
-      } else if (tipo_area === "canteiro") {
-        dataToSubmit = {
-          ...baseData,
-          canteiro_id: data.canteiro_id,
-          // Não incluir lote_id ou setor_id
-        };
-      } else { // setor
-        dataToSubmit = {
-          ...baseData,
-          setor_id: data.setor_id,
-          // Não incluir lote_id ou canteiro_id
-        };
-      }
-      
-      console.log("Dados adaptados para envio:", dataToSubmit);
-      
-      return await graphqlRequest("INSERT_IRRIGACAO", { irrigacao: dataToSubmit });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["irrigacoes"] });
-      setIsAddDialogOpen(false);
-      toast({
-        title: "Irrigação registrada",
-        description: "O registro de irrigação foi adicionado com sucesso.",
-      });
-      addForm.reset();
-    },
-    onError: (error) => {
-      toast({
-        title: "Erro",
-        description: `Erro ao registrar irrigação: ${error.message}`,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Form for adding irrigation record
-  const addForm = useForm<IrrigationFormValues>({
-    resolver: zodResolver(irrigationSchema),
-    defaultValues: {
-      tipo_area: "lote",
-      lote_id: undefined,
-      canteiro_id: undefined,
-      setor_id: undefined,
-      data: new Date().toISOString().split('T')[0],
-      volume_agua: 0,
-      metodo: "",
-    },
-  });
-
-  // Available irrigation methods
-  const irrigationMethods = [
-    "Aspersão",
-    "Gotejamento",
-    "Microaspersão",
-    "Superficial",
-    "Subsuperficial",
-    "Outro"
-  ];
-
-  // Filter irrigation records
-  const filteredIrrigations = (irrigationData?.irrigacoes || []).filter((irrigation) => {
-    if (!irrigation) return false;
+  // Filter harvest records
+  const filteredHarvests = (harvestData?.colheitas || []).filter((harvest) => {
+    if (!harvest) return false;
     // Busca
-    const matchesSearch = !searchTerm || (irrigation.metodo?.toLowerCase() || '').includes(searchTerm.toLowerCase());
-    // Filtro de data
-    if (dateFilter === "all") return matchesSearch;
-    const irrigationDate = new Date(irrigation.data);
-    const today = new Date();
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(today.getDate() - 7);
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(today.getDate() - 30);
-    if (dateFilter === "last7days") {
-      return matchesSearch && irrigationDate >= sevenDaysAgo;
-    }
-    if (dateFilter === "last30days") {
-      return matchesSearch && irrigationDate >= thirtyDaysAgo;
-    }
+    const matchesSearch = !searchTerm || 
+      harvest.destino.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      harvest.observacoes?.toLowerCase().includes(searchTerm.toLowerCase());
+    
     return matchesSearch;
   });
 
-  console.log('irrigationData:', irrigationData);
-  console.log('filteredIrrigations:', filteredIrrigations);
-
   // Calculate statistics
   const statistics = {
-    totalVolume: filteredIrrigations?.reduce((acc, curr) => acc + curr.volume_agua, 0) || 0,
-    averageVolume: filteredIrrigations?.length 
-      ? (filteredIrrigations.reduce((acc, curr) => acc + curr.volume_agua, 0) / filteredIrrigations.length)
+    totalQuantity: filteredHarvests?.reduce((acc, curr) => acc + curr.quantidade_colhida, 0) || 0,
+    averageQuantity: filteredHarvests?.length 
+      ? (filteredHarvests.reduce((acc, curr) => acc + curr.quantidade_colhida, 0) / filteredHarvests.length)
       : 0,
-    lastIrrigation: filteredIrrigations?.length 
-      ? new Date(Math.max(...filteredIrrigations.map(i => new Date(i.data).getTime())))
+    lastHarvest: filteredHarvests?.length 
+      ? new Date(Math.max(...filteredHarvests.map(i => new Date(i.data).getTime())))
       : null,
   };
 
@@ -347,11 +255,11 @@ export default function IrrigationPage() {
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Gestão de Irrigação</h1>
-          <p className="text-muted-foreground">Monitore e registre as irrigações da sua propriedade</p>
+          <h1 className="text-3xl font-bold">Gestão de Colheitas</h1>
+          <p className="text-muted-foreground">Monitore e registre as colheitas da sua propriedade</p>
         </div>
         <Button onClick={() => setIsAddDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" /> Nova Irrigação
+          <Plus className="mr-2 h-4 w-4" /> Nova Colheita
         </Button>
       </div>
 
@@ -360,12 +268,12 @@ export default function IrrigationPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Volume Total
+              Quantidade Total
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {statistics.totalVolume.toLocaleString()} L
+              {statistics.totalQuantity.toLocaleString()} {filteredHarvests?.[0]?.unidade || "un"}
             </div>
           </CardContent>
         </Card>
@@ -373,12 +281,12 @@ export default function IrrigationPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Volume Médio
+              Quantidade Média
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {statistics.averageVolume.toLocaleString(undefined, { maximumFractionDigits: 2 })} L
+              {statistics.averageQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} {filteredHarvests?.[0]?.unidade || "un"}
             </div>
           </CardContent>
         </Card>
@@ -386,13 +294,13 @@ export default function IrrigationPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Última Irrigação
+              Última Colheita
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {statistics.lastIrrigation 
-                ? format(statistics.lastIrrigation, "dd/MM/yyyy")
+              {statistics.lastHarvest 
+                ? format(statistics.lastHarvest, "dd/MM/yyyy")
                 : "Nenhuma"}
             </div>
           </CardContent>
@@ -402,9 +310,9 @@ export default function IrrigationPage() {
       {/* Filters */}
       <Card>
         <CardHeader>
-          <CardTitle>Registros de Irrigação</CardTitle>
+          <CardTitle>Registros de Colheita</CardTitle>
           <CardDescription>
-            Histórico de todas as irrigações realizadas
+            Histórico de todas as colheitas realizadas
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -413,7 +321,7 @@ export default function IrrigationPage() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Buscar por método..."
+                placeholder="Buscar por destino ou observações..."
                 className="pl-8"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -495,17 +403,6 @@ export default function IrrigationPage() {
                 </Select>
               )}
             </div>
-            
-            <Select value={dateFilter} onValueChange={setDateFilter}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Filtrar por data" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as datas</SelectItem>
-                <SelectItem value="last7days">Últimos 7 dias</SelectItem>
-                <SelectItem value="last30days">Últimos 30 dias</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           {isLoading ? (
@@ -514,11 +411,11 @@ export default function IrrigationPage() {
                 <Skeleton key={i} className="w-full h-12" />
               ))}
             </div>
-          ) : filteredIrrigations?.length === 0 ? (
+          ) : filteredHarvests?.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
-              {searchTerm || dateFilter !== "all" || selectedAreaType
+              {searchTerm || selectedAreaType
                 ? "Nenhum registro encontrado com os filtros aplicados"
-                : "Nenhum registro de irrigação encontrado"}
+                : "Nenhum registro de colheita encontrado"}
             </div>
           ) : (
             <div className="rounded-md border">
@@ -527,32 +424,33 @@ export default function IrrigationPage() {
                   <TableRow>
                     <TableHead className="w-[200px]">Área</TableHead>
                     <TableHead className="w-[100px]">Tipo</TableHead>
-                    <TableHead className="w-[120px]">Volume (L)</TableHead>
-                    <TableHead>Método</TableHead>
+                    <TableHead className="w-[120px]">Quantidade</TableHead>
+                    <TableHead>Destino</TableHead>
+                    <TableHead>Observações</TableHead>
                     <TableHead className="w-[120px]">Data</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredIrrigations?.map((irrigacao: IrrigationRecord) => {
+                  {filteredHarvests?.map((colheita: HarvestRecord) => {
                     // Encontrar o nome da área
                     let areaName = "";
                     let areaType = "";
-                    if (irrigacao.lote_id) {
-                      const lote = lotesData?.lotes?.find(l => l.id === irrigacao.lote_id);
+                    if (colheita.lote_id) {
+                      const lote = lotesData?.lotes?.find(l => l.id === colheita.lote_id);
                       areaName = lote?.nome || "Lote não encontrado";
                       areaType = "Lote";
-                    } else if (irrigacao.canteiro_id) {
-                      const canteiro = canteirosData?.canteiros?.find(c => c.id === irrigacao.canteiro_id);
+                    } else if (colheita.canteiro_id) {
+                      const canteiro = canteirosData?.canteiros?.find(c => c.id === colheita.canteiro_id);
                       areaName = canteiro?.nome || "Canteiro não encontrado";
                       areaType = "Canteiro";
-                    } else if (irrigacao.setor_id) {
-                      const setor = setoresData?.setores?.find(s => s.id === irrigacao.setor_id);
+                    } else if (colheita.setor_id) {
+                      const setor = setoresData?.setores?.find(s => s.id === colheita.setor_id);
                       areaName = setor?.nome || "Setor não encontrado";
                       areaType = "Setor";
                     }
 
                     return (
-                      <TableRow key={irrigacao.id}>
+                      <TableRow key={colheita.id}>
                         <TableCell className="font-medium">{areaName}</TableCell>
                         <TableCell>
                           <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
@@ -560,13 +458,18 @@ export default function IrrigationPage() {
                           </span>
                         </TableCell>
                         <TableCell className="font-medium">
-                          {irrigacao.volume_agua.toLocaleString('pt-BR')} L
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {irrigacao.metodo}
+                          {colheita.quantidade_colhida.toLocaleString('pt-BR')} {colheita.unidade}
                         </TableCell>
                         <TableCell>
-                          {format(new Date(irrigacao.data), "dd/MM/yyyy")}
+                          <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-700/10">
+                            {colheita.destino}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {colheita.observacoes || "-"}
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(colheita.data), "dd/MM/yyyy")}
                         </TableCell>
                       </TableRow>
                     );
@@ -578,21 +481,20 @@ export default function IrrigationPage() {
         </CardContent>
       </Card>
 
-      {/* Add Irrigation Dialog */}
+      {/* Add Harvest Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Registrar Irrigação</DialogTitle>
+            <DialogTitle>Registrar Colheita</DialogTitle>
             <DialogDescription>
-              Registre uma nova irrigação realizada em uma área
+              Registre uma nova colheita realizada em uma área
             </DialogDescription>
           </DialogHeader>
           <Form {...addForm}>
             <form onSubmit={addForm.handleSubmit((data) => {
               console.log("Dados do formulário:", data);
-              addIrrigationMutation.mutate(data);
+              addHarvestMutation.mutate(data);
             })} className="space-y-4">
-
               
               <FormField
                 control={addForm.control}
@@ -714,14 +616,15 @@ export default function IrrigationPage() {
               
               <FormField
                 control={addForm.control}
-                name="volume_agua"
+                name="quantidade_colhida"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Volume de Água (L)*</FormLabel>
+                    <FormLabel>Quantidade*</FormLabel>
                     <FormControl>
                       <Input 
                         type="number" 
                         step="0.1"
+                        min="0.1"
                         placeholder="Ex: 1000" 
                         {...field}
                       />
@@ -733,24 +636,66 @@ export default function IrrigationPage() {
               
               <FormField
                 control={addForm.control}
-                name="metodo"
+                name="unidade"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Método de Irrigação*</FormLabel>
+                    <FormLabel>Unidade*</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value || ""}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione um método" />
+                          <SelectValue placeholder="Selecione a unidade" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {irrigationMethods.map((method) => (
-                          <SelectItem key={method} value={method}>
-                            {method}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="kg">Quilograma (kg)</SelectItem>
+                        <SelectItem value="g">Grama (g)</SelectItem>
+                        <SelectItem value="ton">Tonelada (ton)</SelectItem>
+                        <SelectItem value="unidade">Unidade (un)</SelectItem>
+                        <SelectItem value="caixa">Caixa (cx)</SelectItem>
+                        <SelectItem value="saca">Saca (sc)</SelectItem>
+                        <SelectItem value="lata">Lata (lt)</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={addForm.control}
+                name="destino"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Destino*</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o destino" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Venda">Venda</SelectItem>
+                        <SelectItem value="Consumo próprio">Consumo próprio</SelectItem>
+                        <SelectItem value="Doação">Doação</SelectItem>
+                        <SelectItem value="Processamento">Processamento</SelectItem>
+                        <SelectItem value="Estoque">Estoque</SelectItem>
+                        <SelectItem value="Outro">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={addForm.control}
+                name="observacoes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Observações</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Observações sobre a colheita" {...field} />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -766,7 +711,7 @@ export default function IrrigationPage() {
                 </Button>
                 <Button 
                   type="submit"
-                  disabled={addIrrigationMutation.isPending}
+                  disabled={addHarvestMutation.isPending}
                   onClick={() => {
                     console.log("Estado do formulário:", addForm.formState);
                     if (Object.keys(addForm.formState.errors).length > 0) {
@@ -774,10 +719,10 @@ export default function IrrigationPage() {
                     }
                   }}
                 >
-                  {addIrrigationMutation.isPending && (
+                  {addHarvestMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Registrar Irrigação
+                  Registrar Colheita
                 </Button>
               </DialogFooter>
             </form>
@@ -786,4 +731,4 @@ export default function IrrigationPage() {
       </Dialog>
     </div>
   );
-}
+} 

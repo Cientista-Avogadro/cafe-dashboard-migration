@@ -105,6 +105,49 @@ const TableCaption = React.forwardRef<
 ))
 TableCaption.displayName = "TableCaption"
 
+const ClickableTableRow = React.forwardRef<
+  HTMLTableRowElement,
+  React.HTMLAttributes<HTMLTableRowElement> & {
+    onClick?: (e: React.MouseEvent<HTMLTableRowElement>) => void;
+  }
+>(({ className, onClick, children, ...props }, ref) => {
+  const handleClick = (e: React.MouseEvent<HTMLTableRowElement>) => {
+    // Se o clique foi em um botão ou elemento interativo, não propaga
+    const target = e.target as HTMLElement;
+    const isInteractive = target.closest('button') || 
+                         target.closest('a') || 
+                         target.closest('input') || 
+                         target.closest('select') ||
+                         target.closest('[role="button"]') ||
+                         target.closest('[data-no-click]') ||
+                         target.closest('[aria-haspopup="true"]') ||
+                         target.closest('[role="dialog"]');
+    
+    if (isInteractive) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    
+    onClick?.(e);
+  };
+
+  return (
+    <tr
+      ref={ref}
+      onClick={handleClick}
+      className={cn(
+        "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted cursor-pointer",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </tr>
+  );
+});
+ClickableTableRow.displayName = "ClickableTableRow";
+
 export {
   Table,
   TableHeader,
@@ -114,4 +157,5 @@ export {
   TableRow,
   TableCell,
   TableCaption,
+  ClickableTableRow,
 }

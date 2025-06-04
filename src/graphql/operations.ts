@@ -1045,6 +1045,8 @@ export const GET_PLANEJAMENTO_BY_ID = gql`
       data_inicio
       data_fim_prevista
       status
+      area_plantada
+      produtividade_esperada
     }
     
     # Obter insumos relacionados ao planejamento

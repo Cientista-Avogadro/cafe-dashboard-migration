@@ -21,6 +21,7 @@ import {
 import { ArrowLeft, MapPin, Calendar, Edit, LineChart } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { HarvestList } from "@/components/harvest-list";
 
 // Função para inicializar o Leaflet no lado do cliente
 const initLeaflet = () => {
@@ -243,6 +244,7 @@ export default function SectorDetailsPage() {
               <TabsTrigger value="overview">Visão Geral</TabsTrigger>
               <TabsTrigger value="lotes">Lotes</TabsTrigger>
               <TabsTrigger value="activity">Atividades</TabsTrigger>
+              <TabsTrigger value="colheitas">Colheitas</TabsTrigger>
             </TabsList>
             
             {/* Aba de Visão Geral */}
@@ -400,6 +402,11 @@ export default function SectorDetailsPage() {
                   Nenhum registro de atividade.
                 </div>
               )}
+            </TabsContent>
+            
+            {/* Aba de Colheitas */}
+            <TabsContent value="colheitas" className="space-y-6">
+              <HarvestList areaType="setor" areaId={id} />
             </TabsContent>
           </Tabs>
         </CardContent>

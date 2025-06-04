@@ -46,6 +46,9 @@ import { ptBR } from "date-fns/locale";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { PestList } from "@/components/pest-list";
+import { IrrigationList } from "@/components/irrigation-list";
+import { HarvestList } from "@/components/harvest-list";
 
 // Importante: As irrigações são gerenciadas enviando apenas o campo relevante 
 // para o banco de dados (lote_id, canteiro_id ou setor_id) dependendo do tipo 
@@ -525,283 +528,26 @@ export default function LotDetailsPage() {
             </TabsList>
 
             {/* Aba de Irrigações */}
-            <TabsContent value="irrigation" className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-medium">Histórico de Irrigações</h3>
-                <Button size="sm" onClick={handleCreateIrrigation}>
-                  <Plus className="h-4 w-4 mr-1" /> Registrar Irrigação
-                </Button>
-              </div>
-
-              {isLoadingIrrigations ? (
-                <div className="space-y-2 py-4">
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                </div>
-              ) : irrigacoes.length > 0 ? (
-                <div className="rounded-md border">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Volume (L)</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Método</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Observações</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {irrigacoes.map((item: Irrigation) => (
-                        <tr key={item.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {format(new Date(item.data), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.volume_agua} L</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.metodo}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {item.observacao || "-"}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <div className="flex gap-2">
-                              <Button variant="ghost" size="sm" onClick={() => handleEditIrrigation(item)}>
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm" onClick={() => handleDeleteClick(item.id)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  Nenhum registro de irrigação encontrado.
-                </div>
-              )}
-              
-              {/* Diálogo para adicionar/editar irrigação */}
-              <Dialog open={isIrrigationDialogOpen} onOpenChange={setIsIrrigationDialogOpen}>
-                <DialogContent className="sm:max-w-[500px]">
-                  <DialogHeader>
-                    <DialogTitle>
-                      {currentIrrigation ? "Editar Registro de Irrigação" : "Novo Registro de Irrigação"}
-                    </DialogTitle>
-                    <DialogDescription>
-                      {currentIrrigation 
-                        ? "Atualize os detalhes do registro de irrigação abaixo." 
-                        : "Preencha os detalhes do novo registro de irrigação."}
-                    </DialogDescription>
-                  </DialogHeader>
-                  
-                  <form onSubmit={handleSubmit(onSubmitIrrigationForm)} className="space-y-4 py-2">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="data">Data da Irrigação</Label>
-                        <Input 
-                          id="data" 
-                          type="date" 
-                          {...register("data")} 
-                          className={errors.data ? "border-red-500" : ""}
-                        />
-                        {errors.data && (
-                          <p className="text-red-500 text-xs mt-1">{errors.data.message}</p>
-                        )}
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="volume_agua">Volume de Água (L)</Label>
-                        <Input 
-                          id="volume_agua" 
-                          type="number" 
-                          step="0.01" 
-                          min="0" 
-                          {...register("volume_agua")} 
-                          className={errors.volume_agua ? "border-red-500" : ""}
-                        />
-                        {errors.volume_agua && (
-                          <p className="text-red-500 text-xs mt-1">{errors.volume_agua.message}</p>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="metodo">Método de Irrigação</Label>
-                      <Select
-                        defaultValue={currentIrrigation?.metodo || ""}
-                        onValueChange={(value) => setValue("metodo", value)}
-                      >
-                        <SelectTrigger
-                          id="metodo"
-                          className={errors.metodo ? "border-red-500" : ""}
-                        >
-                          <SelectValue placeholder="Selecione um método" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Aspersão">Aspersão</SelectItem>
-                          <SelectItem value="Gotejamento">Gotejamento</SelectItem>
-                          <SelectItem value="Microaspersão">Microaspersão</SelectItem>
-                          <SelectItem value="Inundação">Inundação</SelectItem>
-                          <SelectItem value="Sulcos">Sulcos</SelectItem>
-                          <SelectItem value="Manual">Manual</SelectItem>
-                          <SelectItem value="Outro">Outro</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {errors.metodo && (
-                        <p className="text-red-500 text-xs mt-1">{errors.metodo.message}</p>
-                      )}
-                    </div>
-                    
-                    <DialogFooter className="pt-4">
-                      <DialogClose asChild>
-                        <Button variant="outline" type="button">
-                          Cancelar
-                        </Button>
-                      </DialogClose>
-                      <Button 
-                        type="submit" 
-                        disabled={addIrrigationMutation.isPending || updateIrrigationMutation.isPending}
-                      >
-                        {addIrrigationMutation.isPending || updateIrrigationMutation.isPending ? "Salvando..." : "Salvar"}
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
-              
-              {/* Diálogo de confirmação para exclusão */}
-              <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Tem certeza que deseja excluir este registro de irrigação? Esta ação não pode ser desfeita.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction 
-                      onClick={handleDeleteConfirm}
-                      disabled={deleteIrrigationMutation.isPending}
-                    >
-                      {deleteIrrigationMutation.isPending ? "Excluindo..." : "Excluir"}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+            <TabsContent value="irrigation">
+              <IrrigationList 
+                areaId={id!} 
+                areaType="lote" 
+                areaName={lote?.nome || "Lote"} 
+              />
             </TabsContent>
 
             {/* Aba de Pragas */}
             <TabsContent value="pests" className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-medium">Histórico de Pragas</h3>
-                <Button size="sm">
-                  Registrar Praga
-                </Button>
-              </div>
-
-              {pestData.length > 0 ? (
-                <div className="rounded-md border">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Método de Controle</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resultado</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {pestData.map((item) => (
-                        <tr key={item.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {format(new Date(item.data), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.tipo_praga}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.metodo_controle}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <Badge variant={item.resultado === "Efetivo" ? "default" : "outline"}>
-                              {item.resultado}
-                            </Badge>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <div className="flex gap-2">
-                              <Button variant="ghost" size="sm">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  Nenhum registro de pragas encontrado.
-                </div>
-              )}
+              <PestList 
+                areaId={id} 
+                areaType="lote" 
+                areaName={lote.nome} 
+              />
             </TabsContent>
 
             {/* Aba de Colheitas */}
-            <TabsContent value="harvest" className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-medium">Histórico de Colheitas</h3>
-                <Button size="sm">
-                  Registrar Colheita
-                </Button>
-              </div>
-
-              {harvestData.length > 0 ? (
-                <div className="rounded-md border">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qualidade</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {harvestData.map((item) => (
-                        <tr key={item.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {format(new Date(item.data), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.quantidade} {item.unidade}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <Badge variant={item.qualidade === "Excelente" ? "default" : "outline"}>
-                              {item.qualidade}
-                            </Badge>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <div className="flex gap-2">
-                              <Button variant="ghost" size="sm">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  Nenhum registro de colheita encontrado.
-                </div>
-              )}
+            <TabsContent value="harvest" className="space-y-6">
+              <HarvestList areaType="lote" areaId={id} />
             </TabsContent>
           </Tabs>
         </CardContent>

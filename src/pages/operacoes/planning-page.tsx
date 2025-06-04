@@ -30,7 +30,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Search, Loader2, Calendar as CalendarIcon } from "lucide-react";
 import { z } from "zod";
@@ -52,6 +51,8 @@ const planejamentoSchema = z.object({
     required_error: "Data de fim prevista é obrigatória",
   }),
   status: z.string().optional(),
+  area_plantada: z.number().min(0, "Área plantada deve ser maior que zero").optional(),
+  produtividade_esperada: z.number().min(0, "Produtividade esperada deve ser maior que zero").optional(),
   insumos: z.array(
     z.object({
       produto_id: z.string().uuid("ID do produto inválido"),
@@ -263,21 +264,20 @@ export default function PlanningPage() {
         data_fim_prevista: format(data.data_fim_prevista, 'yyyy-MM-dd'),
         status: data.status || "Planejado",
         propriedade_id: user.propriedade_id,
-        setor_id: setor_id
+        setor_id: setor_id,
+        area_plantada: data.area_plantada,
+        produtividade_esperada: data.produtividade_esperada
       };
       
       // Inserimos o planejamento
       const result = await graphqlRequest("INSERT_PLANEJAMENTO", { planejamento: planejamentoData });
-
-      
       
       // Verificamos se o planejamento foi criado com sucesso e tem um ID
       if (result?.insert_planejamentos_one?.id && selectedInsumos.length > 0) {
-       
         const planejamentoId = result.insert_planejamentos_one.id;
         
         // Preparamos os dados dos insumos para inserção
-        const insumosPromises = selectedInsumos.map(insumo => {
+        const insumosPromises = selectedInsumos.map(async insumo => {
           const insumoData = {
             planejamento_id: planejamentoId,
             produto_id: insumo.produto_id,
@@ -288,7 +288,29 @@ export default function PlanningPage() {
           };
           
           // Chamada para inserir cada insumo na tabela de relacionamento
-          return graphqlRequest("INSERT_PLANEJAMENTO_INSUMO", { insumo: insumoData });
+          await graphqlRequest("INSERT_PLANEJAMENTO_INSUMO", { insumo: insumoData });
+
+          // Atualizar estoque do produto
+          const produtoInfo = insumosData?.produtos_estoque.find(p => p.id === insumo.produto_id);
+          if (produtoInfo && typeof produtoInfo.quantidade === 'number') {
+            // Atualizar quantidade em estoque
+            const novaQuantidade = Math.max(0, produtoInfo.quantidade - insumo.quantidade);
+            await graphqlRequest("UPDATE_PRODUTO_ESTOQUE", {
+              id: insumo.produto_id,
+              produto: { quantidade: novaQuantidade }
+            });
+
+            // Registrar movimentação no estoque
+            await graphqlRequest("INSERT_MOVIMENTACAO_ESTOQUE", {
+              movimentacao: {
+                produto_id: insumo.produto_id,
+                tipo: "saida",
+                quantidade: insumo.quantidade,
+                data: format(data.data_inicio, 'yyyy-MM-dd'),
+                descricao: `Uso no planejamento: ${culturasData?.culturas.find(c => c.id === data.cultura_id)?.nome || 'Cultura'}`
+              }
+            });
+          }
         });
         
         // Aguardamos todas as inserções de insumos
@@ -301,6 +323,7 @@ export default function PlanningPage() {
       queryClient.invalidateQueries({ queryKey: ["all-planejamentos"] });
       queryClient.invalidateQueries({ queryKey: ["planejamentos-lote"] });
       queryClient.invalidateQueries({ queryKey: ["planejamentos-canteiro"] });
+      queryClient.invalidateQueries({ queryKey: ["produtos_estoque"] });
       setIsAddDialogOpen(false);
       toast({
         title: "Planejamento adicionado",
@@ -309,7 +332,6 @@ export default function PlanningPage() {
       addForm.reset();
       insumoForm.reset();
       setSelectedInsumos([]);
-      
     },
     onError: (error: any) => {
       toast({
@@ -376,13 +398,10 @@ export default function PlanningPage() {
           data_fim_prevista: format(data.data_fim_prevista, 'yyyy-MM-dd'),
           status: data.status,
           propriedade_id: user.propriedade_id,
-          setor_id: setor_id
+          setor_id: setor_id,
+          area_plantada: data.area_plantada,
+          produtividade_esperada: data.produtividade_esperada
         };
-        
-        console.log("Dados enviados para atualização:", {
-          id: data.id,
-          planejamento: planejamentoData
-        });
         
         // Usar uma abordagem mais direta para a chamada GraphQL
         const response = await graphqlRequest("UPDATE_PLANEJAMENTO", { 
@@ -390,17 +409,20 @@ export default function PlanningPage() {
           planejamento: planejamentoData 
         });
         
-        console.log("Resposta da atualização:", response);
-        
         // Atualizar os insumos do planejamento
         if (selectedInsumos.length > 0) {
-          // Primeiro, excluir todos os insumos existentes para este planejamento
+          // Primeiro, buscar os insumos existentes para calcular as diferenças
+          const insumosExistentes = await graphqlRequest("GET_PLANEJAMENTO_INSUMOS", { 
+            planejamento_id: data.id 
+          });
+          
+          // Excluir todos os insumos existentes
           await graphqlRequest("DELETE_PLANEJAMENTO_INSUMOS", { 
             planejamento_id: data.id 
           });
           
-          // Depois, inserir os novos insumos
-          const insumosPromises = selectedInsumos.map(insumo => {
+          // Inserir os novos insumos e atualizar o estoque
+          const insumosPromises = selectedInsumos.map(async insumo => {
             const insumoData = {
               planejamento_id: data.id,
               produto_id: insumo.produto_id,
@@ -409,7 +431,41 @@ export default function PlanningPage() {
               observacoes: `Preço unitário: R$ ${insumo.preco_unitario?.toFixed(2) || '0.00'}`
             };
             
-            return graphqlRequest("INSERT_PLANEJAMENTO_INSUMO", { insumo: insumoData });
+            // Inserir o novo insumo
+            await graphqlRequest("INSERT_PLANEJAMENTO_INSUMO", { insumo: insumoData });
+
+            // Encontrar o insumo existente correspondente
+            const insumoExistente = insumosExistentes?.planejamentos_insumos?.find(
+              (i: any) => i.produto_id === insumo.produto_id
+            );
+
+            // Calcular a diferença na quantidade
+            const quantidadeAntiga = insumoExistente?.quantidade || 0;
+            const diferencaQuantidade = insumo.quantidade - quantidadeAntiga;
+
+            if (diferencaQuantidade !== 0) {
+              // Atualizar estoque do produto
+              const produtoInfo = insumosData?.produtos_estoque.find(p => p.id === insumo.produto_id);
+              if (produtoInfo && typeof produtoInfo.quantidade === 'number') {
+                // Atualizar quantidade em estoque
+                const novaQuantidade = Math.max(0, produtoInfo.quantidade - diferencaQuantidade);
+                await graphqlRequest("UPDATE_PRODUTO_ESTOQUE", {
+                  id: insumo.produto_id,
+                  produto: { quantidade: novaQuantidade }
+                });
+
+                // Registrar movimentação no estoque
+                await graphqlRequest("INSERT_MOVIMENTACAO_ESTOQUE", {
+                  movimentacao: {
+                    produto_id: insumo.produto_id,
+                    tipo: diferencaQuantidade > 0 ? "saida" : "entrada",
+                    quantidade: Math.abs(diferencaQuantidade),
+                    data: format(data.data_inicio, 'yyyy-MM-dd'),
+                    descricao: `Ajuste no planejamento: ${culturasData?.culturas.find(c => c.id === data.cultura_id)?.nome || 'Cultura'}`
+                  }
+                });
+              }
+            }
           });
           
           await Promise.all(insumosPromises);
@@ -423,6 +479,7 @@ export default function PlanningPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["all-planejamentos"] });
+      queryClient.invalidateQueries({ queryKey: ["produtos_estoque"] });
       setIsEditDialogOpen(false);
       setSelectedPlanejamento(null);
       toast({
@@ -898,7 +955,7 @@ export default function PlanningPage() {
 
       {/* Dialog para adicionar planejamento */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="sm:max-w-[550px]">
+        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Adicionar Planejamento</DialogTitle>
             <DialogDescription>
@@ -988,34 +1045,15 @@ export default function PlanningPage() {
                   control={addForm.control}
                   name="data_inicio"
                   render={({ field }) => (
-                    <FormItem className="flex flex-col">
+                    <FormItem>
                       <FormLabel>Data de Início*</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={"outline"}
-                              className={`w-full pl-3 text-left font-normal ${!field.value && "text-muted-foreground"}`}
-                            >
-                              {field.value ? (
-                                format(field.value, "PPP", { locale: pt })
-                              ) : (
-                                <span>Selecione uma data</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            disabled={(date) => date < new Date("1900-01-01")}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <FormControl>
+                        <Input 
+                          type="date" 
+                          {...field} 
+                          value={field.value ? format(field.value, 'yyyy-MM-dd') : ''} 
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1024,34 +1062,59 @@ export default function PlanningPage() {
                   control={addForm.control}
                   name="data_fim_prevista"
                   render={({ field }) => (
-                    <FormItem className="flex flex-col">
+                    <FormItem>
                       <FormLabel>Data de Fim Prevista*</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={"outline"}
-                              className={`w-full pl-3 text-left font-normal ${!field.value && "text-muted-foreground"}`}
-                            >
-                              {field.value ? (
-                                format(field.value, "PPP", { locale: pt })
-                              ) : (
-                                <span>Selecione uma data</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            disabled={(date) => date < new Date("1900-01-01")}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <FormControl>
+                        <Input 
+                          type="date" 
+                          {...field} 
+                          value={field.value ? format(field.value, 'yyyy-MM-dd') : ''} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={addForm.control}
+                  name="area_plantada"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Área Plantada (ha)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          {...field}
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={addForm.control}
+                  name="produtividade_esperada"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Produtividade Esperada (t/ha)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          {...field}
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1170,7 +1233,7 @@ export default function PlanningPage() {
 
       {/* Dialog de edição de planejamento */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Planejamento</DialogTitle>
             <DialogDescription>
@@ -1263,34 +1326,15 @@ export default function PlanningPage() {
                   control={editForm.control}
                   name="data_inicio"
                   render={({ field }) => (
-                    <FormItem className="flex flex-col">
+                    <FormItem>
                       <FormLabel>Data de Início*</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={"outline"}
-                              className={`w-full pl-3 text-left font-normal ${!field.value && "text-muted-foreground"}`}
-                            >
-                              {field.value ? (
-                                format(field.value, "PPP", { locale: pt })
-                              ) : (
-                                <span>Selecione uma data</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            disabled={(date) => date < new Date("1900-01-01")}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <FormControl>
+                        <Input 
+                          type="date" 
+                          {...field} 
+                          value={field.value ? format(field.value, 'yyyy-MM-dd') : ''} 
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1299,34 +1343,59 @@ export default function PlanningPage() {
                   control={editForm.control}
                   name="data_fim_prevista"
                   render={({ field }) => (
-                    <FormItem className="flex flex-col">
+                    <FormItem>
                       <FormLabel>Data de Fim Prevista*</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={"outline"}
-                              className={`w-full pl-3 text-left font-normal ${!field.value && "text-muted-foreground"}`}
-                            >
-                              {field.value ? (
-                                format(field.value, "PPP", { locale: pt })
-                              ) : (
-                                <span>Selecione uma data</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            disabled={(date) => date < new Date("1900-01-01")}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <FormControl>
+                        <Input 
+                          type="date" 
+                          {...field} 
+                          value={field.value ? format(field.value, 'yyyy-MM-dd') : ''} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="area_plantada"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Área Plantada (ha)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          {...field}
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="produtividade_esperada"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Produtividade Esperada (t/ha)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          {...field}
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1382,7 +1451,7 @@ export default function PlanningPage() {
 
       {/* Dialog de confirmação de exclusão */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Confirmar Exclusão</DialogTitle>
             <DialogDescription>
@@ -1405,7 +1474,7 @@ export default function PlanningPage() {
 
       {/* Dialog para seleção de insumos */}
       <Dialog open={isInsumoDialogOpen} onOpenChange={setIsInsumoDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Adicionar Insumo</DialogTitle>
             <DialogDescription>
@@ -1455,12 +1524,23 @@ export default function PlanningPage() {
                     }}
                   >
                     <option value="">Selecione um insumo</option>
-                    {insumosData.produtos_estoque.map((produto) => (
-                      <option key={produto.id} value={produto.id}>
-                        {produto.nome} {produto.unidade ? `(${produto.unidade})` : ''}
-                      </option>
-                    ))}
+                    {insumosData.produtos_estoque
+                      .filter(produto => produto.quantidade > 0)
+                      .map((produto) => (
+                        <option key={produto.id} value={produto.id}>
+                          {produto.nome} ({produto.quantidade} {produto.unidade})
+                        </option>
+                      ))}
                   </select>
+                  {insumoToAdd.produto_id && (
+                    <p className="text-sm text-muted-foreground">
+                      Estoque disponível: {
+                        insumosData.produtos_estoque.find(p => p.id === insumoToAdd.produto_id)?.quantidade
+                      } {
+                        insumosData.produtos_estoque.find(p => p.id === insumoToAdd.produto_id)?.unidade
+                      }
+                    </p>
+                  )}
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
@@ -1471,6 +1551,7 @@ export default function PlanningPage() {
                       type="number"
                       min="0.1"
                       step="0.1"
+                      max={insumoToAdd.produto_id ? insumosData.produtos_estoque.find(p => p.id === insumoToAdd.produto_id)?.quantidade : undefined}
                       value={insumoToAdd.quantidade}
                       onChange={(e) => {
                         const quantidade = parseFloat(e.target.value) || 0;
@@ -1547,7 +1628,11 @@ export default function PlanningPage() {
               Cancelar
             </Button>
             <Button
-              disabled={!insumosData?.produtos_estoque || insumosData.produtos_estoque.length === 0}
+              disabled={!insumosData?.produtos_estoque || 
+                       insumosData.produtos_estoque.length === 0 || 
+                       !insumoToAdd.produto_id || 
+                       insumoToAdd.quantidade <= 0 ||
+                       (insumoToAdd.produto_id && insumoToAdd.quantidade > (insumosData.produtos_estoque.find(p => p.id === insumoToAdd.produto_id)?.quantidade || 0))}
               onClick={() => {
                 // Adicionar insumo apenas se produto selecionado e quantidade válida
                 if (insumoToAdd.produto_id && insumoToAdd.quantidade > 0) {

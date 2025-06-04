@@ -68,6 +68,8 @@ interface PlanejamentoDetalhesResult {
     data_fim_prevista?: string;
     status?: string;
     propriedade_id?: string;
+    area_plantada?: number;
+    produtividade_esperada?: number;
   } | null;
   insumos: InsumosPlanejamento[];
   produtos: ProdutoEstoque[];
@@ -117,7 +119,7 @@ export default function PlanningDetailsPage() {
 
   // Função para voltar à página anterior
   const handleBack = () => {
-    setLocation('/planejamentos');
+    setLocation('/producao');
   };
   
   // Função para imprimir a página
@@ -247,6 +249,16 @@ export default function PlanningDetailsPage() {
 
     return { nome: 'Não definido', tamanho: 0, tipo: 'Área' };
   }, [planejamentoData, loteData, canteiroData, setorData]);
+
+  // Add this after the areaInfo useMemo
+  const planejamentoInfo = useMemo(() => {
+    if (!planejamentoData?.planejamento) return null;
+    const { area_plantada, produtividade_esperada } = planejamentoData.planejamento;
+    return {
+      area_plantada,
+      produtividade_esperada
+    };
+  }, [planejamentoData]);
 
   // Categorizar insumos e calcular custos
   const { insumosCategorizados, custoTotal, custoPorHectare } = useMemo(() => {
@@ -546,6 +558,26 @@ export default function PlanningDetailsPage() {
                   </Card>
                 </div>
               )}
+            </div>
+
+            {/* Add this in the JSX where you want to display the new fields */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Área Plantada</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{planejamentoInfo?.area_plantada ? `${planejamentoInfo.area_plantada.toFixed(2)} ha` : "Não definido"}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Produtividade Esperada</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{planejamentoInfo?.produtividade_esperada ? `${planejamentoInfo.produtividade_esperada.toFixed(2)} t/ha` : "Não definido"}</div>
+                </CardContent>
+              </Card>
             </div>
           </CardContent>
         </Card>

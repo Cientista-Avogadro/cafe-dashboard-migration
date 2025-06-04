@@ -34,6 +34,7 @@ import ConfigPage from "./pages/sistema/configuracao";
 import UsersPage from "./pages/sistema/usuarios";
 import RelatoriosPage from './pages/gestao/relatorios-page';
 import FinanceiroPage from './pages/gestao/financeiro-page';
+import HarvestPage from "@/pages/operacoes/harvest-page";
 
 function Router() {
   return (
@@ -59,6 +60,7 @@ function Router() {
       <ProtectedRoute path="/sistema" component={ConfigPage} />
       <ProtectedRoute path="/sistema/configuracao" component={ConfigPage} />
       <ProtectedRoute path="/sistema/usuarios" component={UsersPage} />
+      <ProtectedRoute path="/colheitas" component={HarvestPage} />
       <Route component={NotFound} />
     </Switch>
   );
