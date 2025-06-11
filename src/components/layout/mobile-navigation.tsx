@@ -1,5 +1,4 @@
 import { Link } from "wouter";
-import { useState } from "react";
 
 interface MobileNavigationProps {
   currentPath: string;
@@ -14,7 +13,6 @@ export default function MobileNavigation({
   setMobileMenuOpen,
   className 
 }: MobileNavigationProps) {
-  const [profileOpen, setProfileOpen] = useState(false);
   
   // Generate the navigation items
   const navItems = [
