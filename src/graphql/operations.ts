@@ -281,6 +281,8 @@ export const GET_PLANEJAMENTOS = gql`
       data_fim_prevista
       status
       propriedade_id
+      area_plantada
+      produtividade_esperada
     }
   }
 `;
@@ -311,8 +313,8 @@ export const UPDATE_PLANEJAMENTO = gql`
 
 // Operações de Atividades
 export const GET_ATIVIDADES = gql`
-  query GetAtividades($planejamento_id: uuid!) {
-    atividades(where: { planejamento_id: { _eq: $planejamento_id } }) {
+  query GetAtividades($propriedade_id: uuid) {
+    atividades(where: { propriedade_id: { _eq: $propriedade_id } }) {
       id
       planejamento_id
       canteiro_id
@@ -337,7 +339,7 @@ export const INSERT_ATIVIDADE = gql`
 
 // Operações de Irrigações
 export const GET_IRRIGACOES = gql`
-  query GetIrrigacoes($lote_id: uuid, $propriedade_id: uuid) {
+  query GetIrrigacoes($propriedade_id: uuid!) {
     irrigacoes(where: { propriedade_id: { _eq: $propriedade_id } }) {
       id
       lote_id
@@ -906,7 +908,7 @@ export const UPDATE_LOT = gql`
       id
       nome
       setor_id
-      cultura_atual
+      cultura_atual_id
       status
       latitude
       longitude
@@ -1147,3 +1149,109 @@ export const INSERT_PRAGA_PRODUTO = gql`
 `;
 
 // Outras operações podem ser adicionadas conforme necessário
+
+export const GET_CULTURA_BY_ID = gql`
+  query GetCulturaById($id: uuid!) {
+    cultura: culturas_by_pk(id: $id) {
+      id
+      nome
+      variedade
+      ciclo_estimado_dias
+      produtividade
+    }
+  }
+`;
+
+export const ADD_COLHEITA = gql`
+  mutation AddColheita($colheita: colheitas_insert_input!) {
+    insert_colheitas_one(object: $colheita) {
+      id
+      quantidade_colhida
+      unidade
+      propriedade_id
+      planejamento_id
+      observacoes
+      lote_id
+      destino
+      cultura_id
+      data
+      canteiro_id
+      produtividade_real
+      area_colhida
+    }
+  }
+`;
+
+export const GET_COLHEITAS_BY_PROPRIEDADE = gql`
+  query GetColheitasByPropriedade($propriedade_id: uuid!) {
+    colheitas(where: { propriedade_id: { _eq: $propriedade_id } }, order_by: { data: desc }) {
+      id
+      data
+      quantidade_colhida
+      unidade
+      destino
+      observacoes
+      cultura_id
+      lote_id
+      propriedade_id
+      planejamento_id
+    }
+  }
+`;
+
+export const GET_COLHEITAS = gql`
+  query GetColheitas($canteiro_id: uuid!) {
+    colheitas(where: { canteiro_id: { _eq: $canteiro_id } }, order_by: { data: desc }) {
+      id
+      data
+      quantidade_colhida
+      area_colhida
+      produtividade_real
+      unidade
+      destino
+      observacoes
+      cultura_id
+      canteiro_id
+    }
+  }
+`;
+
+export const GET_LOTE = gql`
+  query GetLote($id: Int!) {
+    lote(id: $id) {
+      id
+      nome
+      area
+      descricao
+      latitude
+      longitude
+      status
+      cultura_id
+      setor_id
+      propriedade_id
+      setor {
+        id
+        nome
+      }
+      canteiros {
+        id
+        nome
+        area
+        status
+        cultura_id
+      }
+    }
+  }
+`;
+
+export const GET_COLHEITAS_BY_LOTE = gql`
+  query GetColheitasByLote($lote_id: uuid!, $propriedade_id: uuid!) {
+    colheitas(where: { lote_id: { _eq: $lote_id }, propriedade_id: { _eq: $propriedade_id } }) {
+      id
+      data
+      quantidade_colhida
+      lote_id
+      propriedade_id
+    }
+  }
+`;

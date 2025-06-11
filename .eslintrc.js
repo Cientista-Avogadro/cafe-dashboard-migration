@@ -1,0 +1,62 @@
+/** @type {import('eslint').Linter.Config} */
+module.exports = {
+  root: true,
+  env: { browser: true, es2020: true },
+  parser: '@typescript-eslint/parser',
+  parserOptions: {
+    project: './tsconfig.app.json',
+  },
+  plugins: ['simple-import-sort', 'unused-imports', '@typescript-eslint'],
+  extends: [
+    'eslint:recommended',
+    'plugin:@typescript-eslint/recommended',
+    'plugin:react-hooks/recommended',
+    'plugin:import/errors',
+    'plugin:import/warnings',
+    'plugin:import/typescript',
+  ],
+  rules: {
+    '@typescript-eslint/no-unnecessary-condition': 'error',
+    '@typescript-eslint/prefer-nullish-coalescing': 'error',
+    '@typescript-eslint/no-namespace': 'off',
+    '@typescript-eslint/no-explicit-any': 'off',
+    'import/no-unresolved': 'off',
+    'simple-import-sort/imports': 'error',
+    'simple-import-sort/exports': 'error',
+    quotes: ['error', 'single'],
+    'no-console': 'error',
+    'prefer-arrow-callback': 'error',
+    'linebreak-style': 'off',
+    'no-nested-ternary': 'error',
+    'no-unneeded-ternary': 'error',
+    // Note: you must disable the base rule as it can report incorrect errors
+    'no-use-before-define': 'off',
+    '@typescript-eslint/no-use-before-define': 'error',
+    '@typescript-eslint/no-empty-function': 'warn',
+    // no unused vars
+    'no-unused-vars': 'off',
+    '@typescript-eslint/no-unused-vars': ['off'],
+    'unused-imports/no-unused-imports': 'error',
+    'unused-imports/no-unused-vars': [
+      'error',
+      {
+        vars: 'all',
+        varsIgnorePattern: '^_',
+        args: 'after-used',
+        argsIgnorePattern: '^_',
+      },
+    ],
+  },
+  ignorePatterns: [
+    'dist',
+    '.eslintrc.cjs',
+    'package.json',
+    'package-lock.json',
+    'tsconfig.json',
+    'tsconfig.node.json',
+    'tsconfig.app.json',
+    'node_modules',
+    '.vscode',
+    'vite.config.ts',
+  ],
+};

@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { ProductionData } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 
 interface ProductionChartProps {
   data?: ProductionData[];
@@ -9,35 +9,11 @@ interface ProductionChartProps {
 }
 
 export default function ProductionChart({ data, isLoading }: ProductionChartProps) {
-  // Get color class based on color name
-  const getColorClass = (color: string) => {
-    const colorMap: Record<string, string> = {
-      'primary': 'bg-primary',
-      'accent': 'bg-accent',
-      'secondary': 'bg-secondary',
-      'warning': 'bg-warning',
-      'info': 'bg-info'
-    };
-    
-    const bgColorMap: Record<string, string> = {
-      'primary': 'bg-primary/20',
-      'accent': 'bg-accent/20',
-      'secondary': 'bg-secondary/20',
-      'warning': 'bg-warning/20',
-      'info': 'bg-info/20'
-    };
-    
-    return {
-      fg: colorMap[color] || 'bg-slate-500',
-      bg: bgColorMap[color] || 'bg-slate-200'
-    };
-  };
-
   if (isLoading) {
     return (
       <Card>
         <CardContent className="p-4">
-          <Skeleton className="h-7 w-40 mb-4" />
+          <Skeleton className="h-7 md:w-40 mb-4" />
           <div className="space-y-4">
             {Array(5).fill(0).map((_, i) => (
               <div key={i}>
@@ -54,40 +30,35 @@ export default function ProductionChart({ data, isLoading }: ProductionChartProp
     );
   }
 
+  // Adiciona valor absoluto para cada cultura
+  const chartData = data?.map(item => ({
+    crop: item.crop,
+    quantidade: item.percentage, // Aqui percentage é a % do total, mas vamos mostrar também o valor absoluto
+    color: item.color,
+    percentage: item.percentage
+  })) || [];
+
   return (
     <Card>
-      <CardContent className="p-4">
+      <CardContent className="p-4 ">
         <h2 className="text-lg font-medium text-slate-900 mb-4">Produção por Cultura</h2>
-        <div className="space-y-4">
-          {data?.map((item, index) => {
-            const colors = getColorClass(item.color);
-            
-            return (
-              <div key={index} className="relative pt-1">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <span className="text-xs font-semibold inline-block text-slate-800">
-                      {item.crop}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span 
-                      className={`text-xs font-semibold inline-block text-${item.color}`}
-                      style={{ color: `hsl(var(--${item.color}))` }}
-                    >
-                      {item.percentage}%
-                    </span>
-                  </div>
-                </div>
-                <div className={`overflow-hidden h-2 text-xs flex rounded ${colors.bg}`}>
-                  <div
-                    style={{ width: `${item.percentage}%` }}
-                    className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center ${colors.fg}`}
-                  ></div>
-                </div>
-              </div>
-            );
-          })}
+        <div className="h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={chartData}
+              layout="vertical"
+              margin={{ top: 30, right: 40, left: 40, bottom: 30 }}
+              barCategoryGap={24}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" domain={[0, 100]} tickFormatter={v => `${v}%`} />
+              <YAxis type="category" dataKey="crop" width={120} />
+              <Tooltip formatter={(value: number, name: string, props: any) => `${value}%`} />
+              <Bar dataKey="percentage" fill="#10B981">
+                <LabelList dataKey="percentage" position="right" formatter={(v: number) => `${v}%`} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </CardContent>
     </Card>

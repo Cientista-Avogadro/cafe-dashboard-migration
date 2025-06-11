@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Pest, Lot, Sector, Canteiro, PragaProduto, Produto } from "@/lib/types";
+import { Pest, Lot, Canteiro, PragaProduto, Produto } from "@/lib/types";
 import { graphqlRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { format } from "date-fns";
+import { format, addDays, isBefore, isAfter } from "date-fns";
 
 import {
   Card,
@@ -194,7 +194,7 @@ export default function PestPage() {
         });
       } else {
         // Criar nova praga
-        let pestData: any = {
+        const pestData: any = {
           data: data.data,
           tipo_praga: data.tipo_praga,
           metodo_controle: data.metodo_controle,
@@ -550,9 +550,72 @@ export default function PestPage() {
     }
   };
 
+  const checkAndCreatePestActivities = async (praga: any) => {
+    if (!praga.data) return;
+
+    const controlDate = new Date(praga.data);
+    const tomorrow = addDays(new Date(), 1);
+    const today = new Date();
+
+    // Verifica se a data do controle está entre hoje e amanhã
+    if (isBefore(controlDate, tomorrow) && isAfter(controlDate, today)) {
+      // Verifica se já existe uma atividade de alerta de controle de praga para esta praga
+      const existingActivities = await graphqlRequest(
+        "GET_ATIVIDADES",
+        { propriedade_id: user?.propriedade_id }
+      );
+
+      const hasPestAlert = existingActivities?.atividades?.some(
+        (activity: any) => 
+          activity.tipo === 'Alerta de Controle de Praga' && 
+          activity.data_prevista === format(controlDate, 'yyyy-MM-dd') &&
+          activity.observacoes?.includes(praga.tipo_praga || '')
+      );
+
+      if (!hasPestAlert) {
+        // Cria a atividade apenas se não existir uma atividade similar
+        await graphqlRequest(
+          "INSERT_ATIVIDADE",
+          {
+            propriedade_id: user?.propriedade_id,
+            tipo: 'Alerta de Controle de Praga',
+            data_prevista: format(controlDate, 'yyyy-MM-dd'),
+            observacoes: `Controle de praga "${praga.tipo_praga}" previsto para ${format(controlDate, 'dd/MM/yyyy')}`
+          }
+        );
+      }
+    }
+  };
+
+  // Adiciona o useEffect para verificar as atividades periodicamente
+  useEffect(() => {
+    const checkAllPestActivities = async () => {
+      if (!user?.propriedade_id) return;
+      
+      const response = await graphqlRequest("GET_PRAGAS", { 
+        propriedade_id: user.propriedade_id,
+        canteiro_id: null
+      });
+      
+      if (response?.pragas) {
+        for (const praga of response.pragas) {
+          await checkAndCreatePestActivities(praga);
+        }
+      }
+    };
+
+    // Verifica imediatamente ao carregar
+    checkAllPestActivities();
+
+    // Verifica a cada hora
+    const interval = setInterval(checkAllPestActivities, 60 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [user?.propriedade_id]);
+
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between md:items-center md:flex-row flex-col space-y-2 mb-6">
         <div>
           <h1 className="text-3xl font-bold">Controle de Pragas</h1>
           <p className="text-muted-foreground">Monitore e registre ocorrências de pragas</p>
@@ -1061,9 +1124,9 @@ export default function PestPage() {
               <div className="flex justify-end">
                 <Button 
                   onClick={addProduct}
-                  disabled={!currentProduct.produto_id || 
-                           currentProduct.quantidade_utilizada <= 0 ||
-                           (currentProduct.produto_id && currentProduct.quantidade_utilizada > (produtosData?.produtos_estoque.find(p => p.id === currentProduct.produto_id)?.quantidade || 0))}
+                  disabled={Boolean(!currentProduct.produto_id || currentProduct.produto_id.length === 0 || 
+                    currentProduct.quantidade_utilizada <= 0 ||
+                    (currentProduct.produto_id && currentProduct.quantidade_utilizada > (produtosData?.produtos_estoque.find(p => p.id === currentProduct.produto_id)?.quantidade || 0)))}
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Adicionar Produto

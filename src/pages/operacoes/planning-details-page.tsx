@@ -14,9 +14,20 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Printer, CircleDollarSign, Bookmark } from "lucide-react";
+import { ArrowLeft, Printer, CircleDollarSign, Bookmark, FileText, Download } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { 
+  Calendar, 
+  MapPin, 
+  Leaf, 
+  Package, 
+  DollarSign, 
+  Clock, 
+  BarChart3
+} from "lucide-react";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 // Tipo para o produto de estoque
 interface ProdutoEstoque {
@@ -85,6 +96,62 @@ interface InsumoCategoria {
   }>;
   total: number;
 }
+
+// Add status badge component
+const StatusBadge = ({ status }: { status?: string }) => {
+  const getStatusStyle = (status: string = 'planejado') => {
+    switch (status) {
+      case "em_andamento":
+        return "bg-orange-100 text-orange-800"; // Laranja
+      case "concluido":
+        return "bg-green-100 text-green-800"; // Verde
+      case "planejado":
+        return "bg-amber-900 text-amber-50"; // Castanho (marrom)
+      case "cancelado":
+        return "bg-red-100 text-red-800"; // Vermelho
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+  const getStatusText = (status: string = 'planejado') => {
+    switch (status) {
+      case "em_andamento":
+        return "Em Andamento";
+      case "concluido":
+        return "Concluído";
+      case "planejado":
+        return "Planejado";
+      case "cancelado":
+        return "Cancelado";
+      default:
+        return status;
+    }
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${getStatusStyle(status)}`}>
+      {getStatusText(status)}
+    </span>
+  );
+};
+
+// Add helper functions for calculations
+const calcularCustoTotal = (insumos: InsumosPlanejamento[], produtos: ProdutoEstoque[]): number => {
+  return insumos.reduce((total, insumo) => {
+    const produto = produtos.find(p => p.id === insumo.produto_id);
+    if (!produto || !produto.preco_unitario || insumo.quantidade <= 0) return total;
+    return total + (produto.preco_unitario * insumo.quantidade);
+  }, 0);
+};
+
+const calcularCustoPorHectare = (custoTotal: number, area: number): number => {
+  if (area <= 0) return 0;
+  return custoTotal / area;
+};
+
+const calcularCustoPorTonelada = (custoTotal: number, produtividade: number, area: number): number => {
+  if (produtividade <= 0 || area <= 0) return 0;
+  return custoTotal / (produtividade * area);
+};
 
 export default function PlanningDetailsPage() {
   // Referência para impressão
@@ -260,7 +327,7 @@ export default function PlanningDetailsPage() {
     };
   }, [planejamentoData]);
 
-  // Categorizar insumos e calcular custos
+  // Update the useMemo calculation
   const { insumosCategorizados, custoTotal, custoPorHectare } = useMemo(() => {
     if (!planejamentoData) {
       return { insumosCategorizados: [], custoTotal: 0, custoPorHectare: 0 };
@@ -268,17 +335,16 @@ export default function PlanningDetailsPage() {
 
     const { insumos, produtos } = planejamentoData;
     const categorias: { [key: string]: InsumoCategoria } = {};
-    let total = 0;
+    const total = calcularCustoTotal(insumos, produtos);
 
     // Mapear insumos com seus produtos e calcular custos
     insumos.forEach(insumo => {
       const produto = produtos.find(p => p.id === insumo.produto_id);
-      if (!produto) return;
+      if (!produto || !produto.preco_unitario || insumo.quantidade <= 0) return;
 
       const categoria = produto.categoria || 'Outros';
-      const custo = (produto.preco_unitario || 0) * insumo.quantidade;
-      const custoPorHectare = areaInfo.tamanho > 0 ? custo / areaInfo.tamanho : 0;
-      total += custo;
+      const custo = produto.preco_unitario * insumo.quantidade;
+      const custoPorHectare = calcularCustoPorHectare(custo, areaInfo.tamanho);
 
       if (!categorias[categoria]) {
         categorias[categoria] = {
@@ -300,7 +366,7 @@ export default function PlanningDetailsPage() {
 
     // Ordenar categorias pelo valor total
     const insumosCategorizados = Object.values(categorias).sort((a, b) => b.total - a.total);
-    const custoPorHectare = areaInfo.tamanho > 0 ? total / areaInfo.tamanho : 0;
+    const custoPorHectare = calcularCustoPorHectare(total, areaInfo.tamanho);
 
     return { insumosCategorizados, custoTotal: total, custoPorHectare };
   }, [planejamentoData, areaInfo.tamanho]);
@@ -313,6 +379,64 @@ export default function PlanningDetailsPage() {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(valor);
+  };
+
+  // Add export functions
+  const handleExportPDF = async () => {
+    if (!componentRef.current) return;
+    
+    const canvas = await html2canvas(componentRef.current);
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth - 40;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    
+    pdf.addImage(imgData, "PNG", 20, 20, imgWidth, imgHeight);
+    pdf.save(`planejamento_${id}_${format(new Date(), "yyyy-MM-dd")}.pdf`);
+  };
+
+  const handleExportCSV = () => {
+    if (!planejamentoData?.planejamento) return;
+
+    const headers = [
+      "Categoria",
+      "Insumo",
+      "Dose por hectare",
+      "Quantidade Total",
+      "Unidade",
+      "Custo Unitário",
+      "Custo por hectare",
+      "Custo Total"
+    ];
+
+    const rows = insumosCategorizados.flatMap(categoria =>
+      categoria.insumos.map(insumo => [
+        categoria.categoria,
+        insumo.produto?.nome || "Não definido",
+        insumo.produto?.dose_por_hectare ?? '-',
+        insumo.quantidade,
+        insumo.produto?.unidade || insumo.unidade || "un",
+        insumo.produto?.preco_unitario ? formatarMoeda(insumo.produto.preco_unitario) : '-',
+        formatarMoeda(insumo.custo_por_hectare),
+        formatarMoeda(insumo.custo_total)
+      ])
+    );
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `planejamento_${id}_${format(new Date(), "yyyy-MM-dd")}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Estado de carregamento
@@ -364,20 +488,32 @@ export default function PlanningDetailsPage() {
   // Se o planejamento existe, mostrar os detalhes
   return (
     <div className="container mx-auto py-6 space-y-6 print:py-2">
-      <div className="flex justify-between items-center print:hidden">
+      {/* Header with actions */}
+      <div className="flex justify-between md:items-center print:hidden">
         <Button onClick={handleBack} variant="outline" className="flex items-center gap-2">
           <ArrowLeft size={16} />
           Voltar
         </Button>
         
-        <Button onClick={handlePrint} variant="outline" className="flex items-center gap-2">
-          <Printer size={16} />
-          Imprimir
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button onClick={handlePrint} variant="outline" className="flex items-center gap-2">
+            <Printer size={16} />
+            Imprimir
+          </Button>
+          <Button onClick={handleExportPDF} variant="outline" className="flex items-center gap-2">
+            <FileText size={16} />
+            Exportar PDF
+          </Button>
+          <Button onClick={handleExportCSV} variant="outline" className="flex items-center gap-2">
+            <Download size={16} />
+            Exportar CSV
+          </Button>
+        </div>
       </div>
       
       <div ref={componentRef} className="space-y-6">
-        <Card className="mb-6">
+        {/* Main Info Card */}
+        <Card>
           <CardHeader>
             <div className="flex justify-between items-start">
               <div>
@@ -386,78 +522,105 @@ export default function PlanningDetailsPage() {
                   Visualização completa do planejamento e custos de produção
                 </CardDescription>
               </div>
-              <Badge variant={planejamentoData.planejamento.status === 'concluido' ? 'secondary' : 'default'}>
-                {planejamentoData.planejamento.status === 'concluido' ? 'Concluído' : 'Em andamento'}
-              </Badge>
+              <StatusBadge status={planejamentoData.planejamento.status} />
             </div>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Resumo do planejamento */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card>
+          
+          <CardContent>
+            {/* Quick Info Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+              <Card className="bg-muted/50">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Cultura</CardTitle>
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Leaf className="h-4 w-4" />
+                    Cultura
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-2xl font-bold">{culturaData?.cultura?.nome || 'Não definida'}</p>
                   {culturaData?.cultura?.variedade && (
                     <p className="text-sm text-muted-foreground">Variedade: {culturaData.cultura.variedade}</p>
                   )}
+                  {culturaData?.cultura?.ciclo_estimado_dias && (
+                    <p className="text-sm text-muted-foreground">Ciclo: {culturaData.cultura.ciclo_estimado_dias} dias</p>
+                  )}
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="bg-muted/50">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Área</CardTitle>
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    Área
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-2xl font-bold">{areaInfo.nome}</p>
                   <p className="text-sm text-muted-foreground">
                     {areaInfo.tipo}: {areaInfo.tamanho.toFixed(2)} hectares
                   </p>
+                  {planejamentoInfo?.area_plantada && (
+                    <p className="text-sm text-muted-foreground">
+                      Área plantada: {planejamentoInfo.area_plantada.toFixed(2)} ha
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="bg-muted/50">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Período</CardTitle>
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Período
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-baseline gap-2">
-                    {planejamentoData.planejamento.data_inicio && (
-                      <p className="text-lg font-medium">
-                        {format(new Date(planejamentoData.planejamento.data_inicio), "dd/MM/yyyy", { locale: pt })}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <p className="text-sm">
+                        Início: {planejamentoData.planejamento.data_inicio 
+                          ? format(new Date(planejamentoData.planejamento.data_inicio), "dd/MM/yyyy", { locale: pt })
+                          : 'Não definido'}
                       </p>
-                    )}
-                    {planejamentoData.planejamento.data_inicio && planejamentoData.planejamento.data_fim_prevista && (
-                      <span>até</span>
-                    )}
-                    {planejamentoData.planejamento.data_fim_prevista && (
-                      <p className="text-lg font-medium">
-                        {format(new Date(planejamentoData.planejamento.data_fim_prevista), "dd/MM/yyyy", { locale: pt })}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <p className="text-sm">
+                        Fim previsto: {planejamentoData.planejamento.data_fim_prevista
+                          ? format(new Date(planejamentoData.planejamento.data_fim_prevista), "dd/MM/yyyy", { locale: pt })
+                          : 'Não definido'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-muted/50">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4" />
+                    Produtividade
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1">
+                    <p className="text-2xl font-bold">
+                      {planejamentoInfo?.produtividade_esperada 
+                        ? `${planejamentoInfo.produtividade_esperada.toFixed(2)} t/ha`
+                        : 'Não definida'}
+                    </p>
+                    {culturaData?.cultura?.produtividade && (
+                      <p className="text-sm text-muted-foreground">
+                        Média da cultura: {culturaData.cultura.produtividade} kg/ha
                       </p>
                     )}
                   </div>
-                  {planejamentoData.planejamento.data_inicio && planejamentoData.planejamento.data_fim_prevista ? (
-                    <p className="text-sm text-muted-foreground">
-                      Ciclo real: {differenceInDays(
-                        new Date(planejamentoData.planejamento.data_fim_prevista),
-                        new Date(planejamentoData.planejamento.data_inicio)
-                      )} dias
-                      {culturaData?.cultura?.ciclo_estimado_dias && (
-                        <span className="ml-2 text-xs">(Estimativa da cultura: {culturaData.cultura.ciclo_estimado_dias} dias)</span>
-                      )}
-                    </p>
-                  ) : culturaData?.cultura?.ciclo_estimado_dias ? (
-                    <p className="text-sm text-muted-foreground">
-                      Ciclo estimado: {culturaData.cultura.ciclo_estimado_dias} dias
-                    </p>
-                  ) : null}
                 </CardContent>
               </Card>
             </div>
 
-            {/* Resumo de custos */}
+            {/* Cost Summary Card */}
             <Card className="bg-muted/50">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -478,110 +641,73 @@ export default function PlanningDetailsPage() {
                   </div>
 
                   <div>
-                    <h3 className="text-sm font-medium text-muted-foreground">Produtividade Estimada</h3>
+                    <h3 className="text-sm font-medium text-muted-foreground">Custo por Tonelada</h3>
                     <p className="text-2xl font-bold">
-                      {culturaData?.cultura?.produtividade 
-                        ? `${culturaData.cultura.produtividade} kg/ha` 
-                        : 'Não definida'}
+                      {planejamentoInfo?.produtividade_esperada && planejamentoInfo.produtividade_esperada > 0
+                        ? formatarMoeda(calcularCustoPorTonelada(
+                            custoTotal,
+                            planejamentoInfo.produtividade_esperada,
+                            areaInfo.tamanho
+                          ))
+                        : 'Não calculado'}
                     </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-
-            {/* Detalhamento dos insumos por categoria */}
-            <div className="space-y-6">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <Bookmark size={18} />
-                Detalhamento de Insumos
-              </h2>
-
-              {insumosCategorizados.length === 0 ? (
-                <p className="text-muted-foreground">Nenhum insumo registrado para este planejamento.</p>
-              ) : (
-                <div className="space-y-6">
-                  {insumosCategorizados.map(categoria => (
-                    <Card key={categoria.categoria}>
-                      <CardHeader className="pb-2">
-                        <div className="flex justify-between items-center">
-                          <CardTitle className="text-lg">{categoria.categoria}</CardTitle>
-                          <p className="text-lg font-bold">{formatarMoeda(categoria.total)}</p>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-sm text-muted-foreground mb-2">
-                          <span className="inline-flex items-center"><span className="w-3 h-3 inline-block bg-muted/50 mr-2"></span> O custo por hectare representa o valor de cada insumo dividido pela área total.</span>
-                        </div>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Insumo</TableHead>
-                              <TableHead>Quantidade</TableHead>
-                              <TableHead>Preço Unitário</TableHead>
-                              <TableHead>Custo por hectare</TableHead>
-                              <TableHead className="text-right bg-muted/50 font-bold">Total</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {categoria.insumos.map(insumo => (
-                              <TableRow key={insumo.id}>
-                                <TableCell className="font-medium">{insumo.produto?.nome}</TableCell>
-                                <TableCell>
-                                  {insumo.quantidade} {insumo.unidade || insumo.produto?.unidade}
-                                </TableCell>
-                                <TableCell>
-                                  {insumo.produto?.preco_unitario ? formatarMoeda(insumo.produto.preco_unitario) : '-'}
-                                </TableCell>
-                                <TableCell >{formatarMoeda(insumo.custo_por_hectare)}</TableCell>
-                                <TableCell className="text-right bg-muted/50 font-medium">{formatarMoeda(insumo.custo_total)}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </CardContent>
-                    </Card>
-                  ))}
-
-                  <Card className="bg-muted/30">
-                    <CardContent className="py-4">
-                      <div className="flex flex-col space-y-2">
-                        <div className="flex justify-between items-center">
-                          <h3 className="font-semibold text-lg">Custo Total dos Insumos</h3>
-                          <p className="text-xl font-bold">{formatarMoeda(custoTotal)}</p>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <h3 className="font-semibold text-lg">Custo por Hectare</h3>
-                          <p className="text-xl font-bold">{formatarMoeda(custoPorHectare)}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </div>
-
-            {/* Add this in the JSX where you want to display the new fields */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Área Plantada</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{planejamentoInfo?.area_plantada ? `${planejamentoInfo.area_plantada.toFixed(2)} ha` : "Não definido"}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Produtividade Esperada</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{planejamentoInfo?.produtividade_esperada ? `${planejamentoInfo.produtividade_esperada.toFixed(2)} t/ha` : "Não definido"}</div>
-                </CardContent>
-              </Card>
-            </div>
           </CardContent>
         </Card>
 
+        {/* Inputs Details Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Package size={18} />
+              Detalhamento de Insumos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {insumosCategorizados.length === 0 ? (
+              <p className="text-muted-foreground">Nenhum insumo registrado para este planejamento.</p>
+            ) : (
+              <div className="space-y-6">
+                {insumosCategorizados.map(categoria => (
+                  <Card key={categoria.categoria} className="bg-muted/50">
+                    <CardHeader className="pb-2">
+                      <div className="flex justify-between items-center">
+                        <CardTitle className="text-lg">{categoria.categoria}</CardTitle>
+                        <p className="text-lg font-bold">{formatarMoeda(categoria.total)}</p>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {categoria.insumos.map((insumo, index) => (
+                          <div key={index} className="flex flex-col md:flex-row md:items-center md:justify-between py-2 border-b last:border-0 gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium">{insumo.produto?.nome || 'Produto não encontrado'}</p>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
+                                <span><strong>Dose por hectare:</strong> {insumo.produto?.dose_por_hectare ?? '-'}</span>
+                                <span><strong>Quantidade Total:</strong> {insumo.quantidade}</span>
+                                <span><strong>Custo Unitário:</strong> {insumo.produto?.preco_unitario ? formatarMoeda(insumo.produto.preco_unitario) : '-'}</span>
+                                <span><strong>Custo por hectare:</strong> {formatarMoeda(insumo.custo_por_hectare)}</span>
+                                <span><strong>Custo Total:</strong> {formatarMoeda(insumo.custo_total)}</span>
+                              </div>
+                            </div>
+                            <div className="text-right hidden md:block">
+                              <span className="text-xs text-muted-foreground">Unidade: {insumo.produto?.unidade || insumo.unidade || 'un'}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Footer */}
         <div className="text-sm text-muted-foreground mt-8 text-center print:mt-16 border-t pt-4">
           <p>Relatório gerado em {format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: pt })}</p>
           <p>Katanda - Sistema de Gestão Agrícola</p>

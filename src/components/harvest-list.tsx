@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { executeOperation } from "@/lib/hasura";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
@@ -14,9 +14,9 @@ import {
   GET_PLANEJAMENTOS_BY_LOTE,
   GET_PLANEJAMENTOS_BY_CANTEIRO,
   GET_PLANEJAMENTOS_BY_SETOR,
-  ADD_COLHEITA,
   EDIT_COLHEITA,
 } from "@/lib/queries/colheitas";
+import { ADD_COLHEITA } from "@/graphql/operations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,18 +45,22 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search } from "lucide-react";
-import { ClickableTableRow } from "@/components/ui/table";
-import { TableCell } from "@/components/ui/table";
-import { Pencil } from "lucide-react";
+import { DataTable } from "@/components/ui/data-table";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
+import { graphqlRequest } from "@/lib/queryClient";
+import * as operations from "@/graphql/operations";
 
 const harvestSchema = z.object({
   data: z.string(),
-  quantidade_colhida: z.string().transform(Number),
+  quantidade_colhida: z.number().min(1, { message: "A quantidade deve ser maior que zero" }),
   unidade: z.string(),
   destino: z.string(),
   observacoes: z.string().optional(),
   cultura_id: z.string().uuid(),
-  planejamento_id: z.string().uuid(),
+  planejamento_id: z.string().uuid("Planejamento é obrigatório"),
+  area_colhida: z.number().optional(),
+  produtividade_real: z.number().optional(),
 });
 
 type HarvestRecord = {
@@ -72,6 +76,8 @@ type HarvestRecord = {
   setor_id?: string;
   propriedade_id: string;
   planejamento_id: string;
+  area_colhida?: number;
+  produtividade_real?: number;
 };
 
 type PlanningInsumo = {
@@ -92,6 +98,10 @@ type PlanningRecord = {
   id: string;
   canteiro_id: string | null;
   cultura_id: string;
+  cultura?: {
+    id: string;
+    nome: string;
+  };
   data_fim_prevista: string;
   data_inicio: string;
   lote_id: string | null;
@@ -111,50 +121,36 @@ type HarvestFormValues = z.infer<typeof harvestSchema>;
 
 export function HarvestList({ areaType, areaId }: HarvestListProps) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [isAddingHarvest, setIsAddingHarvest] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingHarvest, setEditingHarvest] = useState<HarvestRecord | null>(null);
+  const [selectedPlanejamento, setSelectedPlanejamento] = useState<PlanningRecord | null>(null);
 
   const form = useForm<HarvestFormValues>({
     resolver: zodResolver(harvestSchema),
     defaultValues: {
       data: new Date().toISOString().split("T")[0],
-      quantidade_colhida: 0,
+      quantidade_colhida: 1,
       unidade: "kg",
       destino: "",
       observacoes: "",
       cultura_id: "",
       planejamento_id: "",
+      area_colhida: 0,
+      produtividade_real: 0,
     },
   });
 
-  const getColheitasQuery = () => {
-    switch (areaType) {
-      case "lote":
-        return GET_COLHEITAS_BY_LOTE;
-      case "canteiro":
-        return GET_COLHEITAS_BY_CANTEIRO;
-      case "setor":
-        return GET_COLHEITAS_BY_SETOR;
-    }
-  };
-
-  const getPlanejamentosQuery = () => {
-    switch (areaType) {
-      case "lote":
-        return GET_PLANEJAMENTOS_BY_LOTE;
-      case "canteiro":
-        return GET_PLANEJAMENTOS_BY_CANTEIRO;
-      case "setor":
-        return GET_PLANEJAMENTOS_BY_SETOR;
-    }
-  };
 
   const { data: harvests = [] } = useQuery({
     queryKey: ["harvests", areaType, areaId],
     queryFn: async () => {
       if (!user?.propriedade_id) return [];
-      const query = getColheitasQuery();
+      const query = areaType === "lote" ? GET_COLHEITAS_BY_LOTE :
+                   areaType === "canteiro" ? GET_COLHEITAS_BY_CANTEIRO :
+                   GET_COLHEITAS_BY_SETOR;
       const variables = {
         propriedade_id: user.propriedade_id,
         [`${areaType}_id`]: areaId,
@@ -169,7 +165,9 @@ export function HarvestList({ areaType, areaId }: HarvestListProps) {
     queryKey: ["planejamentos", areaType, areaId],
     queryFn: async () => {
       if (!user?.propriedade_id) return [];
-      const query = getPlanejamentosQuery();
+      const query = areaType === "lote" ? GET_PLANEJAMENTOS_BY_LOTE :
+                   areaType === "canteiro" ? GET_PLANEJAMENTOS_BY_CANTEIRO :
+                   GET_PLANEJAMENTOS_BY_SETOR;
       const variables = {
         propriedade_id: user.propriedade_id,
         [`${areaType}_id`]: areaId,
@@ -192,31 +190,91 @@ export function HarvestList({ areaType, areaId }: HarvestListProps) {
       };
       return executeOperation(ADD_COLHEITA, variables);
     },
-  });
-
-  const editHarvestMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof harvestSchema>) => {
-      if (!editingHarvest) return;
-      const variables = {
-        id: editingHarvest.id,
-        colheita: data,
-      };
-      return executeOperation(EDIT_COLHEITA, variables);
-    },
-  });
-
-  const onSubmit = async (data: z.infer<typeof harvestSchema>) => {
-    try {
-      if (editingHarvest) {
-        await editHarvestMutation.mutateAsync(data);
-      } else {
-        await addHarvestMutation.mutateAsync(data);
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["harvests", areaType, areaId] });
       setIsAddingHarvest(false);
       setEditingHarvest(null);
       form.reset();
-    } catch (error) {
+      toast({
+        title: "Sucesso",
+        description: "Colheita registrada com sucesso",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro",
+        description: `Erro ao registrar colheita: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const editHarvestMutation = useMutation({
+    mutationFn: async ({ id, colheita }: { id: string; colheita: HarvestFormValues }) => {
+      return executeOperation("UPDATE_COLHEITA", { id, colheita });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["colheitas"] });
+      toast({
+        title: "Sucesso",
+        description: "Colheita atualizada com sucesso!",
+      });
+    },
+    onError: (error) => {
+      console.error("Erro ao atualizar colheita:", error);
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar colheita. Tente novamente.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const onSubmit = async (data: z.infer<typeof harvestSchema>) => {
+    setIsSubmitting(true);
+    try {
+      const colheitaData = {
+        ...data,
+        propriedade_id: user?.propriedade_id,
+        [`${areaType}_id`]: areaId,
+      };
+
+      // Validação da quantidade máxima
+      const planejamento = planejamentos.find((p: PlanningRecord) => p.id === data.planejamento_id);
+      if (planejamento && !validateQuantidade(data.quantidade_colhida, planejamento)) {
+        form.setError("quantidade_colhida", {
+          type: "manual",
+          message: "A quantidade colhida não pode ultrapassar a quantidade planejada.",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      await addHarvestMutation.mutateAsync(colheitaData);
+      
+      // Atualizar status do planejamento se necessário
+      if (planejamento) {
+        await checkAndUpdateProductionStatus(planejamento);
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ["harvests", areaType, areaId] });
+      setIsAddingHarvest(false);
+      toast({
+        title: "Colheita registrada",
+        description: "A colheita foi registrada com sucesso.",
+      });
+      form.reset();
+    } catch (error: any) {
       console.error("Erro ao salvar colheita:", error);
+      toast({
+        title: "Erro",
+        description: `Erro ao salvar colheita: ${error.message}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -227,6 +285,7 @@ export function HarvestList({ areaType, areaId }: HarvestListProps) {
       harvest.observacoes?.toLowerCase().includes(searchLower)
     );
   });
+
 
   const totalQuantity = filteredHarvests.reduce(
     (sum: number, harvest: HarvestRecord) => sum + harvest.quantidade_colhida,
@@ -240,12 +299,74 @@ export function HarvestList({ areaType, areaId }: HarvestListProps) {
 
   const lastHarvest = filteredHarvests[0];
 
-  const handleRowClick = (id: string) => {
-    // Implement the logic to handle row click
+  const columns = [
+    {
+      header: "Data",
+      accessorKey: "data",
+      cell: (value: string) => format(new Date(value), "dd/MM/yyyy")
+    },
+    {
+      header: "Quantidade",
+      accessorKey: "quantidade_colhida",
+      cell: (cellInfo: any) => {
+        const row = cellInfo?.row;
+        const quantidade = row?.original?.quantidade_colhida ?? '';
+        const unidade = row?.original?.unidade ?? '';
+        return quantidade
+          ? `${quantidade.toLocaleString('pt-BR')} ${unidade}`
+          : '';
+      }
+    },
+    {
+      header: "Destino",
+      accessorKey: "destino"
+    },
+    {
+      header: "Observações",
+      accessorKey: "observacoes",
+      cell: (value: string) => value || "-"
+    }
+  ];
+
+  // Função para calcular a quantidade total já colhida
+  const getQuantidadeColhida = (planejamentoId: string) => {
+    return harvests
+      .filter((h: HarvestRecord) => h.planejamento_id === planejamentoId)
+      .reduce((sum: number, h: HarvestRecord) => sum + h.quantidade_colhida, 0);
   };
 
-  const handleEdit = (harvest: HarvestRecord) => {
-    // Implement the logic to handle edit
+  // Função para validar a quantidade máxima
+  const validateQuantidade = (value: number, planejamento: PlanningRecord) => {
+    if (!planejamento.area_plantada || !planejamento.produtividade_esperada) return true;
+    
+    const quantidadePlanejada = planejamento.area_plantada * planejamento.produtividade_esperada;
+    const quantidadeColhida = getQuantidadeColhida(planejamento.id);
+    const novaQuantidade = quantidadeColhida + value;
+    
+    return novaQuantidade <= quantidadePlanejada;
+  };
+
+  // Add this function after the getQuantidadeColhida function
+  const checkAndUpdateProductionStatus = async (planejamento: PlanningRecord) => {
+    const quantidadeColhida = getQuantidadeColhida(planejamento.id);
+    const quantidadePlanejada = planejamento.area_plantada && planejamento.produtividade_esperada 
+      ? planejamento.area_plantada * planejamento.produtividade_esperada 
+      : 0;
+
+    // Se a quantidade colhida for maior ou igual à planejada, marca como concluído
+    if (quantidadeColhida >= quantidadePlanejada) {
+      try {
+        await executeOperation("UPDATE_PLANEJAMENTO", {
+          id: planejamento.id,
+          planejamento: {
+            status: "concluido"
+          }
+        });
+        queryClient.invalidateQueries({ queryKey: ["planejamentos"] });
+      } catch (error) {
+        console.error("Erro ao atualizar status do planejamento:", error);
+      }
+    }
   };
 
   return (
@@ -313,42 +434,14 @@ export function HarvestList({ areaType, areaId }: HarvestListProps) {
         </Card>
       </div>
 
-      <div className="rounded-md border">
-        <div className="grid grid-cols-5 gap-4 p-4 font-medium">
-          <div className="col-span-2">Cultura</div>
-          <div>Quantidade</div>
-          <div>Destino</div>
-          <div>Data</div>
-        </div>
-        {filteredHarvests.map((harvest: HarvestRecord) => (
-          <ClickableTableRow 
-            key={harvest.id}
-            onClick={() => handleRowClick(harvest.id)}
-          >
-            <TableCell>{format(new Date(harvest.data), "dd/MM/yyyy")}</TableCell>
-            <TableCell>{harvest.quantidade_colhida.toLocaleString('pt-BR')} kg</TableCell>
-            <TableCell>{harvest.destino}</TableCell>
-            <TableCell>{harvest.observacoes || "-"}</TableCell>
-            <TableCell>
-              <div className="flex space-x-2">
-                <Button 
-                  size="icon" 
-                  variant="outline"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleEdit(harvest);
-                  }}
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-              </div>
-            </TableCell>
-          </ClickableTableRow>
-        ))}
-      </div>
+      <DataTable
+        columns={columns}
+        data={filteredHarvests}
+        title="Registros de Colheita"
+      />
 
       <Dialog open={isAddingHarvest} onOpenChange={setIsAddingHarvest}>
-        <DialogContent className="max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
               {editingHarvest ? "Editar Colheita" : "Adicionar Colheita"}
@@ -357,101 +450,209 @@ export function HarvestList({ areaType, areaId }: HarvestListProps) {
           <div className="overflow-y-auto pr-2">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="planejamento_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Planejamento</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o planejamento" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {planejamentos.map((planejamento: PlanningRecord) => (
-                            <SelectItem key={planejamento.id} value={planejamento.id}>
-                              {planejamento.area_plantada ? `${planejamento.area_plantada} ha` : 'Sem área'} - 
-                              {planejamento.produtividade_esperada ? `${planejamento.produtividade_esperada} t/ha` : 'Sem produtividade'}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="data"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Data</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="quantidade_colhida"
+                    name="planejamento_id"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Quantidade Colhida</FormLabel>
-                        <FormControl>
-                          <Input type="number" step="0.01" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="unidade"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Unidade</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
+                        <FormLabel>Planejamento*</FormLabel>
+                        <Select 
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            const planejamento = planejamentos?.find((p: PlanningRecord) => p.id === value);
+                            if (planejamento) {
+                              form.setValue('cultura_id', planejamento.cultura_id);
+                              setSelectedPlanejamento(planejamento);
+                            }
+                          }} 
+                          value={field.value}
                         >
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Selecione a unidade" />
+                              <SelectValue placeholder="Selecione um planejamento" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="kg">kg</SelectItem>
-                            <SelectItem value="g">g</SelectItem>
-                            <SelectItem value="t">t</SelectItem>
-                            <SelectItem value="un">un</SelectItem>
+                            {planejamentos
+                              ?.filter((planejamento: PlanningRecord) => planejamento.status === 'planejado' || planejamento.status === 'em_andamento')
+                              .map((planejamento: PlanningRecord) => {
+                              const quantidadeColhida = getQuantidadeColhida(planejamento.id);
+                              const quantidadePlanejada = planejamento.area_plantada && planejamento.produtividade_esperada 
+                                ? planejamento.area_plantada * planejamento.produtividade_esperada 
+                                : 0;
+                              const percentualColhido = quantidadePlanejada > 0 
+                                ? (quantidadeColhida / quantidadePlanejada) * 100 
+                                : 0;
+
+                              return (
+                                <SelectItem key={planejamento.id} value={planejamento.id}>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{planejamento.cultura?.nome}</span>
+                                    <span className="text-sm text-muted-foreground">
+                                      {planejamento.area_plantada ? `${planejamento.area_plantada} ha` : 'Sem área'} - 
+                                      {planejamento.produtividade_esperada ? `${planejamento.produtividade_esperada} t/ha` : 'Sem produtividade'}
+                                    </span>
+                                    <span className="text-sm text-muted-foreground">
+                                      {format(new Date(planejamento.data_inicio), "dd/MM/yyyy")} a {format(new Date(planejamento.data_fim_prevista), "dd/MM/yyyy")}
+                                    </span>
+                                    {quantidadePlanejada > 0 && (
+                                      <span className="text-sm text-muted-foreground">
+                                        {percentualColhido.toFixed(1)}% colhido
+                                      </span>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
+                  <FormField
+                    control={form.control}
+                    name="data"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Data*</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-                <FormField
-                  control={form.control}
-                  name="destino"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Destino</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="quantidade_colhida"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Quantidade*</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            step="0.1"
+                            min="0.1"
+                            placeholder="Ex: 1000" 
+                            {...field}
+                            value={field.value != null ? field.value : 1}
+                            onChange={(e) => {
+                              form.setValue("quantidade_colhida", Number(e.target.value));
+                              const quantidade = Number(e.target.value);
+                              const area = Number(form.getValues("area_colhida"));
+                              if (quantidade && area) {
+                                form.setValue("produtividade_real", Number(quantidade) / Number(area));
+                              }
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="area_colhida"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Área Colhida (ha)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            step="0.01"
+                            min="0"
+                            placeholder="Ex: 1.5" 
+                            {...field}
+                            value={field.value != null ? field.value : 0}
+                            onChange={(e) => {
+                              form.setValue("area_colhida", Number(e.target.value));
+                              // Calcular produtividade real se houver quantidade e área
+                              const quantidade = form.getValues("quantidade_colhida");
+                              const area = e.target.value;
+                              if (quantidade && area) {
+                                form.setValue("produtividade_real", Number(quantidade) / Number(area));
+                              }
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="produtividade_real"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Produtividade Real (kg/ha)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            step="0.01"
+                            min="0"
+                            placeholder="Ex: 2500" 
+                            {...field}
+                            value={field.value != null ? field.value : 0}
+                            readOnly
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="unidade"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Unidade*</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione a unidade" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="kg">Quilograma (kg)</SelectItem>
+                            <SelectItem value="g">Grama (g)</SelectItem>
+                            <SelectItem value="ton">Tonelada (ton)</SelectItem>
+                            <SelectItem value="unidade">Unidade (un)</SelectItem>
+                            <SelectItem value="caixa">Caixa (cx)</SelectItem>
+                            <SelectItem value="saca">Saca (sc)</SelectItem>
+                            <SelectItem value="lata">Lata (lt)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="destino"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Destino*</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ex: Venda direta" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
                 <FormField
                   control={form.control}
                   name="observacoes"
@@ -459,33 +660,36 @@ export function HarvestList({ areaType, areaId }: HarvestListProps) {
                     <FormItem>
                       <FormLabel>Observações</FormLabel>
                       <FormControl>
-                        <Textarea {...field} />
+                        <Textarea 
+                          placeholder="Ex: Colheita realizada pela manhã" 
+                          className="resize-none"
+                          {...field} 
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsAddingHarvest(false)}
+                    disabled={isSubmitting}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    {editingHarvest ? "Salvar Alterações" : "Registrar Colheita"}
+                  </Button>
+                </DialogFooter>
               </form>
             </Form>
           </div>
-          <DialogFooter className="mt-6 pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsAddingHarvest(false);
-                setEditingHarvest(null);
-                form.reset();
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={form.handleSubmit(onSubmit)}
-              disabled={addHarvestMutation.isPending || editHarvestMutation.isPending}
-            >
-              {editingHarvest ? "Salvar" : "Adicionar"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

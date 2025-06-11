@@ -68,13 +68,13 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen grid bg-[url('assets/auth-img.png')] bg-cover bg-center bg-no-repeat overflow-hidden " style={{ backgroundSize: "100% 100%" }}>
+    <div className="min-h-screen grid bg-[url('/auth-img.png')] bg-cover bg-center bg-no-repeat overflow-hidden " style={{ backgroundSize: "100% 100%" }}>
       {/* Left column with forms */}
       <div className="flex items-center justify-center p-4 md:p-8">
         <Card className="w-full max-w-md shadow-lg rounded-lg border-0 ">
           <CardHeader className="space-y-1">
             <div className="flex justify-center mb-4">
-              <span className="text-3xl font-bold text-primary">AgroGestão</span>
+              <img src="/logo.png" alt="Katanda" className="h-12" />
             </div>
             <CardTitle className="text-2xl font-bold">Bem-vindo</CardTitle>
             <CardDescription>

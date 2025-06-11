@@ -1,9 +1,16 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sector, Lot, Canteiro } from "@/lib/types";
-import { graphqlRequest } from "@/lib/queryClient";
+import { executeOperation } from "@/lib/hasura";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
+import {
+  GET_COLHEITAS_BY_LOTE,
+  GET_COLHEITAS_BY_CANTEIRO,
+  GET_COLHEITAS_BY_SETOR,
+  ADD_COLHEITA,
+} from "@/lib/hasura";
+import { GET_CULTURAS } from "@/graphql/operations";
 
 import {
   Card,
@@ -113,21 +120,68 @@ interface HarvestRecord {
   propriedade_id?: string;
 }
 
+interface Cultura {
+  id: string;
+  nome: string;
+}
+
 type HarvestFormValues = z.infer<typeof harvestSchema>;
 
 export default function HarvestPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAreaType, setSelectedAreaType] = useState<"lote" | "canteiro" | "setor" | null>(null);
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+
+  // Query to fetch cultures
+  const { data: culturasData } = useQuery<{ culturas: Cultura[] }>({
+    queryKey: ["culturas", user?.propriedade_id],
+    queryFn: async () => {
+      if (!user?.propriedade_id) return { culturas: [] };
+      return await executeOperation(GET_CULTURAS, { propriedade_id: user.propriedade_id });
+    },
+    enabled: !!user?.propriedade_id,
+  });
+
+  const addForm = useForm<HarvestFormValues>({
+    resolver: zodResolver(harvestSchema),
+    defaultValues: {
+      tipo_area: "lote",
+      data: new Date().toISOString().split("T")[0],
+      quantidade_colhida: 0,
+      unidade: "kg",
+      destino: "",
+      observacoes: "",
+      cultura_id: "",
+    },
+  });
+
+  const addHarvestMutation = useMutation({
+    mutationFn: async (data: HarvestFormValues) => {
+      if (!user?.propriedade_id) return;
+      const variables = {
+        colheita: {
+          ...data,
+          propriedade_id: user.propriedade_id,
+        },
+      };
+      return executeOperation(ADD_COLHEITA, variables);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["colheitas", user?.propriedade_id, selectedAreaId, selectedAreaType] });
+      setIsAddDialogOpen(false);
+      addForm.reset();
+    },
+  });
 
   // Query to fetch sectors
   const { data: setoresData } = useQuery<{ setores: Sector[] }>({
     queryKey: ["setores", user?.propriedade_id],
     queryFn: async () => {
       if (!user?.propriedade_id) return { setores: [] };
-      return await graphqlRequest("GET_SETORES", { propriedade_id: user.propriedade_id });
+      return await executeOperation("GET_SETORES", { propriedade_id: user.propriedade_id });
     },
     enabled: !!user?.propriedade_id,
   });
@@ -137,7 +191,7 @@ export default function HarvestPage() {
     queryKey: ["lotes", user?.propriedade_id],
     queryFn: async () => {
       if (!user?.propriedade_id) return { lotes: [] };
-      return await graphqlRequest("GET_LOTES_BY_PROPRIEDADE", { propriedade_id: user.propriedade_id });
+      return await executeOperation("GET_LOTES_BY_PROPRIEDADE", { propriedade_id: user.propriedade_id });
     },
     enabled: !!user?.propriedade_id,
   });
@@ -147,7 +201,7 @@ export default function HarvestPage() {
     queryKey: ["canteiros", user?.propriedade_id],
     queryFn: async () => {
       if (!user?.propriedade_id) return { canteiros: [] };
-      return await graphqlRequest("GET_CANTEIROS", { propriedade_id: user.propriedade_id });
+      return await executeOperation("GET_CANTEIROS", { propriedade_id: user.propriedade_id });
     },
     enabled: !!user?.propriedade_id,
   });
@@ -160,8 +214,9 @@ export default function HarvestPage() {
       
       // Se não tiver tipo de área selecionado ou estiver visualizando todas as colheitas
       if (!selectedAreaType || (selectedAreaId === "-1" && !selectedAreaType)) {
-        return await graphqlRequest("GET_COLHEITAS", { 
-          propriedade_id: user.propriedade_id 
+        return await executeOperation(GET_COLHEITAS_BY_LOTE, { 
+          propriedade_id: user.propriedade_id,
+          lote_id: "-1"
         });
       } 
       
@@ -171,8 +226,9 @@ export default function HarvestPage() {
         if (selectedAreaType === "lote") {
           console.log("Filtrando por todos os lotes");
           // Buscar todas as colheitas da propriedade e filtrar no frontend
-          const response = await graphqlRequest("GET_COLHEITAS", { 
-            propriedade_id: user.propriedade_id 
+          const response = await executeOperation(GET_COLHEITAS_BY_LOTE, { 
+            propriedade_id: user.propriedade_id,
+            lote_id: "-1"
           });
           // Filtrar apenas os que têm lote_id
           response.colheitas = response.colheitas.filter((item: HarvestRecord) => !!item.lote_id);
@@ -181,8 +237,9 @@ export default function HarvestPage() {
         } else if (selectedAreaType === "canteiro") {
           console.log("Filtrando por todos os canteiros");
           // Buscar todas as colheitas da propriedade e filtrar no frontend
-          const response = await graphqlRequest("GET_COLHEITAS", { 
-            propriedade_id: user.propriedade_id 
+          const response = await executeOperation(GET_COLHEITAS_BY_CANTEIRO, { 
+            propriedade_id: user.propriedade_id,
+            canteiro_id: "-1"
           });
           // Filtrar apenas os que têm canteiro_id
           response.colheitas = response.colheitas.filter((item: HarvestRecord) => !!item.canteiro_id);
@@ -191,39 +248,41 @@ export default function HarvestPage() {
         } else if (selectedAreaType === "setor") {
           console.log("Filtrando por todos os setores");
           // Buscar todas as colheitas da propriedade e filtrar no frontend
-          const response = await graphqlRequest("GET_COLHEITAS", { 
-            propriedade_id: user.propriedade_id 
+          const response = await executeOperation(GET_COLHEITAS_BY_SETOR, { 
+            propriedade_id: user.propriedade_id,
+            setor_id: "-1"
           });
           // Filtrar apenas os que têm setor_id
           response.colheitas = response.colheitas.filter((item: HarvestRecord) => !!item.setor_id);
           return response;
         }
-      } else {
-        // Filtrar por item específico
-        if (selectedAreaType === "lote" && selectedAreaId) {
-          console.log("Filtrando por lote_id:", selectedAreaId);
-          return await graphqlRequest("GET_COLHEITAS_BY_LOTE", { 
-            propriedade_id: user.propriedade_id,
-            lote_id: selectedAreaId
-          });
-        } else if (selectedAreaType === "canteiro" && selectedAreaId) {
-          console.log("Filtrando por canteiro_id:", selectedAreaId);
-          return await graphqlRequest("GET_COLHEITAS_BY_CANTEIRO", { 
-            propriedade_id: user.propriedade_id,
-            canteiro_id: selectedAreaId
-          });
-        } else if (selectedAreaType === "setor" && selectedAreaId) {
-          console.log("Filtrando por setor_id:", selectedAreaId);
-          return await graphqlRequest("GET_COLHEITAS_BY_SETOR", { 
-            propriedade_id: user.propriedade_id,
-            setor_id: selectedAreaId
-          });
-        }
+      }
+      
+      // Filtrar por item específico
+      if (selectedAreaType === "lote" && selectedAreaId) {
+        console.log("Filtrando por lote_id:", selectedAreaId);
+        return await executeOperation(GET_COLHEITAS_BY_LOTE, { 
+          propriedade_id: user.propriedade_id,
+          lote_id: selectedAreaId
+        });
+      } else if (selectedAreaType === "canteiro" && selectedAreaId) {
+        console.log("Filtrando por canteiro_id:", selectedAreaId);
+        return await executeOperation(GET_COLHEITAS_BY_CANTEIRO, { 
+          propriedade_id: user.propriedade_id,
+          canteiro_id: selectedAreaId
+        });
+      } else if (selectedAreaType === "setor" && selectedAreaId) {
+        console.log("Filtrando por setor_id:", selectedAreaId);
+        return await executeOperation(GET_COLHEITAS_BY_SETOR, { 
+          propriedade_id: user.propriedade_id,
+          setor_id: selectedAreaId
+        });
       }
       
       // Caso contrário, retornamos todas as colheitas
-      return await graphqlRequest("GET_COLHEITAS", { 
-        propriedade_id: user.propriedade_id 
+      return await executeOperation(GET_COLHEITAS_BY_LOTE, { 
+        propriedade_id: user.propriedade_id,
+        lote_id: "-1"
       });
     },
     enabled: !!user?.propriedade_id,
@@ -667,21 +726,9 @@ export default function HarvestPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Destino*</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o destino" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="Venda">Venda</SelectItem>
-                        <SelectItem value="Consumo próprio">Consumo próprio</SelectItem>
-                        <SelectItem value="Doação">Doação</SelectItem>
-                        <SelectItem value="Processamento">Processamento</SelectItem>
-                        <SelectItem value="Estoque">Estoque</SelectItem>
-                        <SelectItem value="Outro">Outro</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <Input placeholder="Ex: Venda direta" {...field} />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -694,8 +741,33 @@ export default function HarvestPage() {
                   <FormItem>
                     <FormLabel>Observações</FormLabel>
                     <FormControl>
-                      <Input placeholder="Observações sobre a colheita" {...field} />
+                      <Input placeholder="Ex: Colheita realizada pela manhã" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={addForm.control}
+                name="cultura_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cultura*</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a cultura" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {culturasData?.culturas?.map((cultura: Cultura) => (
+                          <SelectItem key={cultura.id} value={cultura.id}>
+                            {cultura.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

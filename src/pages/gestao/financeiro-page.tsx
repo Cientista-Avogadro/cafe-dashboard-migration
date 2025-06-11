@@ -16,6 +16,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { DataTable } from "@/components/ui/data-table";
 
 // Schema for transaction form
 const transactionSchema = z.object({
@@ -176,11 +177,42 @@ export default function FinanceiroPage() {
     document.body.removeChild(link);
   };
 
+  const columns = [
+    {
+      header: "Data",
+      accessorKey: "data",
+      cell: (value: string) => new Date(value).toLocaleDateString('pt-AO')
+    },
+    {
+      header: "Descrição",
+      accessorKey: "descricao"
+    },
+    {
+      header: "Categoria",
+      accessorKey: "categoria",
+      cell: (value: string) => (
+        <span className="px-2 py-1 text-xs rounded-full bg-muted">
+          {value}
+        </span>
+      )
+    },
+    {
+      header: "Valor (AOA)",
+      accessorKey: "valor",
+      cell: (value: number) => (
+        <span className={`font-medium ${transactions.find(t => t.valor === value)?.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}`}>
+          {transactions.find(t => t.valor === value)?.tipo === 'entrada' ? '+' : '-'}
+          {formatCurrency(value)}
+        </span>
+      )
+    }
+  ];
+
   return (
     <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between">
+      <div className="flex md:items-center justify-between md:flex-row flex-col space-y-2 mb-6">
         <h2 className="text-3xl font-bold tracking-tight">Gestão Financeira</h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="mr-2 h-4 w-4" />
             Exportar Extrato
@@ -354,62 +386,11 @@ export default function FinanceiroPage() {
         </TabsList>
 
         <TabsContent value="transacoes" className="space-y-4">
-          <Card>
-            <CardContent className="p-0">
-              <div className="relative overflow-x-auto max-h-[calc(100vh-400px)] overflow-y-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs uppercase bg-muted sticky top-0">
-                    <tr>
-                      <th className="px-6 py-3">Data</th>
-                      <th className="px-6 py-3">Descrição</th>
-                      <th className="px-6 py-3">Categoria</th>
-                      <th className="px-6 py-3 text-right">Valor (AOA)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {isLoading ? (
-                      <tr>
-                        <td colSpan={4} className="px-6 py-4 text-center">
-                          <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                        </td>
-                      </tr>
-                    ) : transactions.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="px-6 py-4 text-center text-muted-foreground">
-                          Nenhuma transação encontrada
-                        </td>
-                      </tr>
-                    ) : (
-                      transactions
-                        .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
-                        .map((transacao) => (
-                          <tr key={transacao.id} className="border-t">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              {new Date(transacao.data).toLocaleDateString('pt-AO')}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="font-medium">{transacao.descricao}</div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="px-2 py-1 text-xs rounded-full bg-muted">
-                                {transacao.categoria}
-                              </span>
-                            </td>
-                            <td
-                              className={`px-6 py-4 text-right font-medium ${transacao.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'
-                                }`}
-                            >
-                              {transacao.tipo === 'entrada' ? '+' : '-'}
-                              {formatCurrency(transacao.valor)}
-                            </td>
-                          </tr>
-                        ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          <DataTable
+            columns={columns}
+            data={transactions}
+            title="Transações Financeiras"
+          />
         </TabsContent>
 
         <TabsContent value="categorias">

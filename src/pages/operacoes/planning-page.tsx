@@ -31,25 +31,23 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Search, Loader2, Calendar as CalendarIcon } from "lucide-react";
+import { Plus, Search, Loader2, Calendar as CalendarIcon, Ban, Check, Pencil } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isAfter, addDays, isBefore } from "date-fns";
 import { pt } from "date-fns/locale";
 import { PlanningDetailButton } from "@/components/planning-detail-button";
 import { useLocation } from "wouter";
+import { INSERT_ATIVIDADE, UPDATE_PLANEJAMENTO } from "@/graphql/operations";
+import { executeOperation } from "@/lib/hasura";
 
 const planejamentoSchema = z.object({
   cultura_id: z.string().uuid("ID da cultura inválido"),
   lote_id: z.string().uuid("ID do lote inválido").optional(),
   canteiro_id: z.string().uuid("ID do canteiro inválido").optional(),
-  data_inicio: z.date({
-    required_error: "Data de início é obrigatória",
-  }),
-  data_fim_prevista: z.date({
-    required_error: "Data de fim prevista é obrigatória",
-  }),
+  data_inicio: z.string().min(1, "Data de início é obrigatória"),
+  data_fim_prevista: z.string().min(1, "Data de fim prevista é obrigatória"),
   status: z.string().optional(),
   area_plantada: z.number().min(0, "Área plantada deve ser maior que zero").optional(),
   produtividade_esperada: z.number().min(0, "Produtividade esperada deve ser maior que zero").optional(),
@@ -77,7 +75,7 @@ export default function PlanningPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedPlanejamento, setSelectedPlanejamento] = useState<Planejamento | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedTab, setSelectedTab] = useState<'lotes' | 'canteiros'>('lotes');
+  const [selectedTab, setSelectedTab] = useState<'grid' | 'table'>('grid');
   const [selectedLoteId, setSelectedLoteId] = useState<string | null>(null);
   const [selectedCanteiroId, setSelectedCanteiroId] = useState<string | null>(null);
   const [selectedInsumos, setSelectedInsumos] = useState<Array<{
@@ -98,12 +96,12 @@ export default function PlanningPage() {
     custo_total?: number;
     dose_por_hectare?: number;
   }>({ produto_id: "", quantidade: 1, unidade: "" });
-  
+
   // Form para o dialog de insumos (evita erro de context)
   const insumoForm = useForm();
 
   // Query para buscar culturas para o dropdown
-  const { data: culturasData } = useQuery<{ culturas: Array<{ id: string; nome: string; ciclo_estimado_dias?: number }> }>({  
+  const { data: culturasData } = useQuery<{ culturas: Array<{ id: string; nome: string; ciclo_estimado_dias?: number }> }>({
     queryKey: ["culturas", user?.propriedade_id],
     queryFn: async () => {
       if (!user?.propriedade_id) return { culturas: [] };
@@ -114,7 +112,7 @@ export default function PlanningPage() {
   });
 
   // Query para buscar setores para o dropdown
-  const { data: setoresData } = useQuery<{ setores: Array<{ id: string; nome: string }> }>({  
+  const { data: setoresData } = useQuery<{ setores: Array<{ id: string; nome: string }> }>({
     queryKey: ["setores", user?.propriedade_id],
     queryFn: async () => {
       if (!user?.propriedade_id) return { setores: [] };
@@ -122,9 +120,9 @@ export default function PlanningPage() {
     },
     enabled: !!user?.propriedade_id,
   });
-  
+
   // Query para buscar lotes para o dropdown
-  const { data: lotesData } = useQuery<{ lotes: Lot[] }>({  
+  const { data: lotesData } = useQuery<{ lotes: Lot[] }>({
     queryKey: ["all-lotes", user?.propriedade_id, setoresData],
     queryFn: async () => {
       if (!user?.propriedade_id) return { lotes: [] };
@@ -149,21 +147,21 @@ export default function PlanningPage() {
   });
 
   // Query para buscar canteiros para o dropdown
-  const { data: canteirosData } = useQuery<{ canteiros: Canteiro[] }>({  
+  const { data: canteirosData } = useQuery<{ canteiros: Canteiro[] }>({
     queryKey: ["all-canteiros", user?.propriedade_id],
     queryFn: async () => {
       if (!user?.propriedade_id) return { canteiros: [] };
       // Apenas passamos propriedade_id para evitar o erro de uuid null
-      const result = await graphqlRequest("GET_CANTEIROS", { 
-        propriedade_id: user.propriedade_id 
+      const result = await graphqlRequest("GET_CANTEIROS", {
+        propriedade_id: user.propriedade_id
       });
       return result;
     },
     enabled: !!user?.propriedade_id,
   });
-  
+
   // Query para buscar insumos (produtos em estoque) para o dropdown
-  const { data: insumosData } = useQuery<{ produtos_estoque: ProductStock[] }>({  
+  const { data: insumosData } = useQuery<{ produtos_estoque: ProductStock[] }>({
     queryKey: ["produtos_estoque", user?.propriedade_id],
     queryFn: async () => {
       if (!user?.propriedade_id) return { produtos_estoque: [] };
@@ -173,19 +171,19 @@ export default function PlanningPage() {
   });
 
   // Query para buscar todos os planejamentos da propriedade
-  const { data: allPlanejamentosData, isLoading: isAllPlanejamentosLoading } = useQuery<{ planejamentos: Planejamento[] }>({  
+  const { data: allPlanejamentosData, isLoading: isAllPlanejamentosLoading } = useQuery<{ planejamentos: Planejamento[] }>({
     queryKey: ["all-planejamentos", user?.propriedade_id],
     queryFn: async () => {
       if (!user?.propriedade_id) return { planejamentos: [] };
-      
+
       try {
         // Buscar todos os planejamentos da propriedade com apenas o filtro de propriedade_id
-        const result = await graphqlRequest("GET_PLANEJAMENTOS", { 
+        const result = await graphqlRequest("GET_PLANEJAMENTOS", {
           propriedade_id: user.propriedade_id
         });
-        
+
         if (!result.planejamentos) return { planejamentos: [] };
-        
+
         // Adicionar informações de cultura, lote e canteiro para exibição
         if (culturasData?.culturas) {
           result.planejamentos.forEach((planejamento: Planejamento) => {
@@ -194,7 +192,7 @@ export default function PlanningPage() {
             if (cultura) {
               planejamento.cultura = cultura;
             }
-            
+
             // Adicionar lote
             if (planejamento.lote_id && lotesData?.lotes) {
               const lote = lotesData.lotes.find(l => l.id === planejamento.lote_id);
@@ -202,7 +200,7 @@ export default function PlanningPage() {
                 planejamento.lote = lote;
               }
             }
-            
+
             // Adicionar canteiro
             if (planejamento.canteiro_id && canteirosData?.canteiros) {
               const canteiro = canteirosData.canteiros.find(c => c.id === planejamento.canteiro_id);
@@ -212,7 +210,7 @@ export default function PlanningPage() {
             }
           });
         }
-        
+
         return result;
       } catch (error) {
         console.error("Erro ao buscar planejamentos:", error);
@@ -221,7 +219,7 @@ export default function PlanningPage() {
     },
     enabled: !!user?.propriedade_id && !!culturasData?.culturas && !!lotesData?.lotes && !!canteirosData?.canteiros,
   });
-  
+
   // Derivar planejamentos de lotes a partir de allPlanejamentosData
   const lotePlanejamentosData = useMemo(() => {
     if (!allPlanejamentosData?.planejamentos || !selectedLoteId) return { planejamentos: [] };
@@ -229,7 +227,7 @@ export default function PlanningPage() {
       planejamentos: allPlanejamentosData.planejamentos.filter(p => p.lote_id === selectedLoteId)
     };
   }, [allPlanejamentosData, selectedLoteId]);
-  
+
   // Derivar planejamentos de canteiros a partir de allPlanejamentosData
   const canteiroPlanejamentosData = useMemo(() => {
     if (!allPlanejamentosData?.planejamentos || !selectedCanteiroId) return { planejamentos: [] };
@@ -237,10 +235,47 @@ export default function PlanningPage() {
       planejamentos: allPlanejamentosData.planejamentos.filter(p => p.canteiro_id === selectedCanteiroId)
     };
   }, [allPlanejamentosData, selectedCanteiroId]);
-  
+
   // Flags de carregamento derivados
   const isLotePlanejamentosLoading = isAllPlanejamentosLoading;
   const isCanteiroPlanejamentosLoading = isAllPlanejamentosLoading;
+
+  // Query para buscar colheitas
+  const { data: colheitasData } = useQuery<{ colheitas: Array<{ id: string; planejamento_id: string; quantidade_colhida: number }> }>({
+    queryKey: ["colheitas", user?.propriedade_id],
+    queryFn: async () => {
+      if (!user?.propriedade_id) return { colheitas: [] };
+      return await graphqlRequest("GET_COLHEITAS_BY_PROPRIEDADE", { propriedade_id: user.propriedade_id });
+    },
+    enabled: !!user?.propriedade_id,
+  });
+
+  // Função para calcular a percentagem de colheita
+  const calcularPercentagemColheita = (planejamento: Planejamento) => {
+    if (!planejamento.area_plantada || !planejamento.produtividade_esperada) return 0;
+
+    const quantidadeTotalEsperada = planejamento.area_plantada * planejamento.produtividade_esperada;
+    if (quantidadeTotalEsperada === 0) return 0;
+
+    const colheitasDoPlanejamento = colheitasData?.colheitas.filter(
+      c => c.planejamento_id === planejamento.id
+    ) || [];
+
+    const quantidadeTotalColhida = colheitasDoPlanejamento.reduce(
+      (acc, colheita) => acc + colheita.quantidade_colhida,
+      0
+    );
+
+    return Math.min(Math.round((quantidadeTotalColhida / quantidadeTotalEsperada) * 100), 100);
+  };
+
+  // Função para obter os planejamentos com percentagem de colheita
+  const getPlanejamentosComPercentagem = () => {
+    return getPlanejamentos().map(planejamento => ({
+      ...planejamento,
+      percentagem_colheita: calcularPercentagemColheita(planejamento)
+    }));
+  };
 
   // Mutation para adicionar planejamento
   const addPlanejamentoMutation = useMutation({
@@ -248,34 +283,34 @@ export default function PlanningPage() {
       if (!user?.propriedade_id) {
         throw new Error("Usuário não possui propriedade associada");
       }
-      
+
       // Encontrar o setor_id se um lote foi selecionado
       let setor_id = undefined;
       if (data.lote_id) {
         const lote = lotesData?.lotes?.find(l => l.id === data.lote_id);
         setor_id = lote?.setor_id;
       }
-      
+
       const planejamentoData = {
         cultura_id: data.cultura_id,
         lote_id: data.lote_id,
         canteiro_id: data.canteiro_id,
-        data_inicio: format(data.data_inicio, 'yyyy-MM-dd'),
-        data_fim_prevista: format(data.data_fim_prevista, 'yyyy-MM-dd'),
+        data_inicio: data.data_inicio,
+        data_fim_prevista: data.data_fim_prevista,
         status: data.status || "Planejado",
         propriedade_id: user.propriedade_id,
         setor_id: setor_id,
         area_plantada: data.area_plantada,
         produtividade_esperada: data.produtividade_esperada
       };
-      
+
       // Inserimos o planejamento
       const result = await graphqlRequest("INSERT_PLANEJAMENTO", { planejamento: planejamentoData });
-      
+
       // Verificamos se o planejamento foi criado com sucesso e tem um ID
       if (result?.insert_planejamentos_one?.id && selectedInsumos.length > 0) {
         const planejamentoId = result.insert_planejamentos_one.id;
-        
+
         // Preparamos os dados dos insumos para inserção
         const insumosPromises = selectedInsumos.map(async insumo => {
           const insumoData = {
@@ -284,9 +319,9 @@ export default function PlanningPage() {
             quantidade: insumo.quantidade,
             unidade: insumo.unidade,
             observacoes: `Preço unitário: R$ ${insumo.preco_unitario?.toFixed(2) || '0.00'}`,
-            data_uso: format(data.data_inicio, 'yyyy-MM-dd'),
+            data_uso: data.data_inicio,
           };
-          
+
           // Chamada para inserir cada insumo na tabela de relacionamento
           await graphqlRequest("INSERT_PLANEJAMENTO_INSUMO", { insumo: insumoData });
 
@@ -306,17 +341,17 @@ export default function PlanningPage() {
                 produto_id: insumo.produto_id,
                 tipo: "saida",
                 quantidade: insumo.quantidade,
-                data: format(data.data_inicio, 'yyyy-MM-dd'),
+                data: data.data_inicio,
                 descricao: `Uso no planejamento: ${culturasData?.culturas.find(c => c.id === data.cultura_id)?.nome || 'Cultura'}`
               }
             });
           }
         });
-        
+
         // Aguardamos todas as inserções de insumos
         await Promise.all(insumosPromises);
       }
-      
+
       return result;
     },
     onSuccess: () => {
@@ -347,21 +382,21 @@ export default function PlanningPage() {
     resolver: zodResolver(planejamentoSchema),
     defaultValues: {
       cultura_id: "",
-      lote_id: selectedTab === 'lotes' ? selectedLoteId || undefined : undefined,
-      canteiro_id: selectedTab === 'canteiros' ? selectedCanteiroId || undefined : undefined,
-      data_inicio: new Date(),
-      data_fim_prevista: new Date(new Date().setDate(new Date().getDate() + 30)),
+      lote_id: selectedTab === 'grid' ? selectedLoteId || undefined : undefined,
+      canteiro_id: selectedTab === 'grid' ? selectedCanteiroId || undefined : undefined,
+      data_inicio: new Date().toISOString().split('T')[0],
+      data_fim_prevista: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0],
       status: "Planejado",
     },
   });
 
   // Atualizar valores padrão quando mudar a aba ou seleção
   useEffect(() => {
-    if (selectedTab === 'lotes') {
+    if (selectedTab === 'grid') {
       addForm.setValue('lote_id', selectedLoteId || undefined);
-      addForm.setValue('canteiro_id', undefined);
-    } else {
       addForm.setValue('canteiro_id', selectedCanteiroId || undefined);
+    } else {
+      addForm.setValue('canteiro_id', undefined);
       addForm.setValue('lote_id', undefined);
     }
   }, [selectedTab, selectedLoteId, selectedCanteiroId, addForm]);
@@ -370,14 +405,14 @@ export default function PlanningPage() {
   const onAddSubmit = (data: PlanejamentoFormValues) => {
     addPlanejamentoMutation.mutate(data);
   };
-  
+
   // Mutation para editar um planejamento
   const editPlanejamentoMutation = useMutation({
     mutationFn: async (data: PlanejamentoFormValues & { id: string }) => {
       if (!user?.propriedade_id) {
         throw new Error("Usuário não possui propriedade associada");
       }
-      
+
       try {
         // Encontrar o setor_id se um lote foi selecionado
         let setor_id = undefined;
@@ -385,42 +420,42 @@ export default function PlanningPage() {
           const lote = lotesData?.lotes?.find(l => l.id === data.lote_id);
           setor_id = lote?.setor_id;
         }
-        
+
         // Garantir que apenas um dos campos (lote_id ou canteiro_id) esteja preenchido
-        const lote_id = selectedTab === 'lotes' ? data.lote_id : null;
-        const canteiro_id = selectedTab === 'canteiros' ? data.canteiro_id : null;
-        
+        const lote_id = selectedTab === 'grid' ? data.lote_id : null;
+        const canteiro_id = selectedTab === 'grid' ? data.canteiro_id : null;
+
         const planejamentoData = {
           cultura_id: data.cultura_id,
           lote_id: lote_id,
           canteiro_id: canteiro_id,
-          data_inicio: format(data.data_inicio, 'yyyy-MM-dd'),
-          data_fim_prevista: format(data.data_fim_prevista, 'yyyy-MM-dd'),
+          data_inicio: data.data_inicio,
+          data_fim_prevista: data.data_fim_prevista,
           status: data.status,
           propriedade_id: user.propriedade_id,
           setor_id: setor_id,
           area_plantada: data.area_plantada,
           produtividade_esperada: data.produtividade_esperada
         };
-        
+
         // Usar uma abordagem mais direta para a chamada GraphQL
-        const response = await graphqlRequest("UPDATE_PLANEJAMENTO", { 
+        const response = await graphqlRequest("UPDATE_PLANEJAMENTO", {
           id: data.id,
-          planejamento: planejamentoData 
+          planejamento: planejamentoData
         });
-        
+
         // Atualizar os insumos do planejamento
         if (selectedInsumos.length > 0) {
           // Primeiro, buscar os insumos existentes para calcular as diferenças
-          const insumosExistentes = await graphqlRequest("GET_PLANEJAMENTO_INSUMOS", { 
-            planejamento_id: data.id 
+          const insumosExistentes = await graphqlRequest("GET_PLANEJAMENTO_INSUMOS", {
+            planejamento_id: data.id
           });
-          
+
           // Excluir todos os insumos existentes
-          await graphqlRequest("DELETE_PLANEJAMENTO_INSUMOS", { 
-            planejamento_id: data.id 
+          await graphqlRequest("DELETE_PLANEJAMENTO_INSUMOS", {
+            planejamento_id: data.id
           });
-          
+
           // Inserir os novos insumos e atualizar o estoque
           const insumosPromises = selectedInsumos.map(async insumo => {
             const insumoData = {
@@ -430,7 +465,7 @@ export default function PlanningPage() {
               unidade: insumo.unidade,
               observacoes: `Preço unitário: R$ ${insumo.preco_unitario?.toFixed(2) || '0.00'}`
             };
-            
+
             // Inserir o novo insumo
             await graphqlRequest("INSERT_PLANEJAMENTO_INSUMO", { insumo: insumoData });
 
@@ -460,17 +495,17 @@ export default function PlanningPage() {
                     produto_id: insumo.produto_id,
                     tipo: diferencaQuantidade > 0 ? "saida" : "entrada",
                     quantidade: Math.abs(diferencaQuantidade),
-                    data: format(data.data_inicio, 'yyyy-MM-dd'),
+                    data: data.data_inicio,
                     descricao: `Ajuste no planejamento: ${culturasData?.culturas.find(c => c.id === data.cultura_id)?.nome || 'Cultura'}`
                   }
                 });
               }
             }
           });
-          
+
           await Promise.all(insumosPromises);
         }
-        
+
         return response;
       } catch (error) {
         console.error("Erro ao atualizar planejamento:", error);
@@ -495,7 +530,7 @@ export default function PlanningPage() {
       });
     },
   });
-  
+
   // Form para edição
   const editForm = useForm<PlanejamentoFormValues & { id: string }>({
     resolver: zodResolver(planejamentoEditSchema),
@@ -505,123 +540,89 @@ export default function PlanningPage() {
       lote_id: "",
       canteiro_id: "",
       status: "Planejado",
-      data_inicio: new Date(),
-      data_fim_prevista: new Date(),
+      data_inicio: new Date().toISOString().split('T')[0],
+      data_fim_prevista: new Date().toISOString().split('T')[0],
     },
   });
-  
+
   const handleEditClick = async (planejamento: Planejamento) => {
     setSelectedPlanejamento(planejamento);
-    
-    console.log("Planejamento selecionado para edição:", planejamento);
-    
+
     // Limpar os insumos selecionados antes de carregar os novos
     setSelectedInsumos([]);
-    
+
     // Carregar os insumos associados a este planejamento
     try {
-      try {
-        const insumosResult = await graphqlRequest("GET_PLANEJAMENTO_INSUMOS", { 
-          planejamento_id: planejamento.id 
-        });
-        
-        console.log("Insumos carregados:", insumosResult);
-        
-        if (insumosResult?.planejamentos_insumos?.length > 0) {
-          // Buscar os produtos do estoque para obter informações adicionais
-          const produtosIds = insumosResult.planejamentos_insumos.map((insumo: any) => insumo.produto_id);
-          let produtosMap: Record<string, any> = {};
-          
-          try {
-            // Tentar buscar os produtos do estoque para complementar as informações
-            if (insumosData?.produtos_estoque) {
-              produtosMap = insumosData.produtos_estoque.reduce((acc: Record<string, any>, produto: any) => {
-                acc[produto.id] = produto;
-                return acc;
-              }, {});
-            }
-          } catch (err) {
-            console.warn("Não foi possível buscar informações detalhadas dos produtos", err);
+      const insumosResult = await graphqlRequest("GET_PLANEJAMENTO_INSUMOS", {
+        planejamento_id: planejamento.id
+      });
+
+      if (insumosResult?.planejamentos_insumos?.length > 0) {
+        // Buscar os produtos do estoque para obter informações adicionais
+        const produtosIds = insumosResult.planejamentos_insumos.map((insumo: any) => insumo.produto_id);
+        let produtosMap: Record<string, any> = {};
+
+        try {
+          // Tentar buscar os produtos do estoque para complementar as informações
+          if (insumosData?.produtos_estoque) {
+            produtosMap = insumosData.produtos_estoque.reduce((acc: Record<string, any>, produto: any) => {
+              acc[produto.id] = produto;
+              return acc;
+            }, {});
           }
-          
-          // Converter para o formato usado pelo estado selectedInsumos
-          const insumosFormatados = insumosResult.planejamentos_insumos.map((insumo: any) => {
-            const produto = produtosMap[insumo.produto_id] || {};
-            const preco_unitario = produto?.preco_unitario || 0;
-            const quantidade = insumo.quantidade || 0;
-            
-            return {
-              produto_id: insumo.produto_id,
-              nome: produto?.nome || 'Produto não encontrado',
-              quantidade: quantidade,
-              unidade: insumo.unidade || produto?.unidade || 'un',
-              preco_unitario: preco_unitario,
-              custo_total: preco_unitario * quantidade,
-              dose_por_hectare: produto?.dose_por_hectare
-            };
-          });
-          
-          // Atualizar o estado com os insumos carregados
-          setSelectedInsumos(insumosFormatados);
+        } catch (err) {
+          console.warn("Não foi possível buscar informações detalhadas dos produtos", err);
         }
-      } catch (graphqlError: any) {
-        // Verifica se o erro é devido à tabela não existir no schema GraphQL
-        if (graphqlError?.message?.includes("field 'planejamentos_insumos' not found in type")) {
-          console.warn("A tabela 'planejamentos_insumos' não está configurada no GraphQL schema");
-          toast({
-            title: "Configuração Pendente",
-            description: "A tabela de insumos não está configurada no GraphQL. Os insumos não serão exibidos até que a configuração seja concluída.",
-            variant: "destructive"
-          });
-          // Continua o fluxo mesmo sem os insumos
-        } else {
-          // Re-lançar o erro para ser capturado pelo catch externo
-          throw graphqlError;
-        }
+
+        // Converter para o formato usado pelo estado selectedInsumos
+        const insumosFormatados = insumosResult.planejamentos_insumos.map((insumo: any) => {
+          const produto = produtosMap[insumo.produto_id] || {};
+          const preco_unitario = produto?.preco_unitario || 0;
+          const quantidade = insumo.quantidade || 0;
+
+          return {
+            produto_id: insumo.produto_id,
+            nome: produto?.nome || 'Produto não encontrado',
+            quantidade: quantidade,
+            unidade: insumo.unidade || produto?.unidade || 'un',
+            preco_unitario: preco_unitario,
+            custo_total: preco_unitario * quantidade,
+            dose_por_hectare: produto?.dose_por_hectare
+          };
+        });
+
+        // Atualizar o estado com os insumos carregados
+        setSelectedInsumos(insumosFormatados);
       }
+
+      // Atualizar o formulário com os dados do planejamento
+      editForm.reset({
+        id: planejamento.id,
+        cultura_id: planejamento.cultura_id,
+        lote_id: planejamento.lote_id || "",
+        canteiro_id: planejamento.canteiro_id || "",
+        status: planejamento.status || "Planejado",
+        data_inicio: planejamento.data_inicio.split('T')[0],
+        data_fim_prevista: planejamento.data_fim_prevista.split('T')[0],
+        area_plantada: planejamento.area_plantada || undefined,
+        produtividade_esperada: planejamento.produtividade_esperada || undefined,
+      });
+
+      setIsEditDialogOpen(true);
     } catch (error) {
-      console.error("Erro ao carregar insumos do planejamento:", error);
+      console.error("Erro ao carregar insumos:", error);
       toast({
-        title: "Aviso",
-        description: "Não foi possível carregar os insumos associados a este planejamento.",
-        variant: "destructive"
+        title: "Erro",
+        description: "Não foi possível carregar os insumos do planejamento.",
+        variant: "destructive",
       });
     }
-    
-    // Preparar as datas para o formulário
-    const dataInicio = typeof planejamento.data_inicio === 'string' 
-      ? parseISO(planejamento.data_inicio) 
-      : new Date(planejamento.data_inicio);
-      
-    const dataFimPrevista = typeof planejamento.data_fim_prevista === 'string' 
-      ? parseISO(planejamento.data_fim_prevista) 
-      : new Date(planejamento.data_fim_prevista);
-    
-    // Resetar o form com os valores do planejamento selecionado
-    editForm.reset({
-      id: planejamento.id,
-      cultura_id: planejamento.cultura_id,
-      lote_id: planejamento.lote_id || "",
-      canteiro_id: planejamento.canteiro_id || "",
-      status: planejamento.status || "Planejado",
-      data_inicio: dataInicio,
-      data_fim_prevista: dataFimPrevista,
-    });
-    
-    // Definir a tab correta com base no tipo de planejamento
-    if (planejamento.lote_id) {
-      setSelectedTab('lotes');
-    } else if (planejamento.canteiro_id) {
-      setSelectedTab('canteiros');
-    }
-    
-    setIsEditDialogOpen(true);
   };
 
   const handleRowClick = (id: string) => {
     setLocation(`/producao/${id}`);
   };
-  
+
   const onEditSubmit = (data: PlanejamentoFormValues & { id: string }) => {
     console.log("Dados do formulário de edição:", data);
     editPlanejamentoMutation.mutate(data);
@@ -665,9 +666,9 @@ export default function PlanningPage() {
 
   // Filtrar planejamentos com base no termo de busca
   const getPlanejamentos = () => {
-    if (selectedTab === 'lotes' && selectedLoteId) {
+    if (selectedTab === 'grid' && selectedLoteId) {
       return lotePlanejamentosData?.planejamentos || [];
-    } else if (selectedTab === 'canteiros' && selectedCanteiroId) {
+    } else if (selectedTab === 'grid' && selectedCanteiroId) {
       return canteiroPlanejamentosData?.planejamentos || [];
     } else {
       return allPlanejamentosData?.planejamentos || [];
@@ -685,271 +686,411 @@ export default function PlanningPage() {
     );
   });
 
-  return (
-    <div className="container mx-auto py-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Produção</h1>
-          <p className="text-muted-foreground">
-            Gerencie o planejamento de cultivo e produção da sua propriedade
-          </p>
-        </div>
-        <Button onClick={() => setIsAddDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" /> Adicionar Planejamento
-        </Button>
-      </div>
+  // Add the status update mutation
+  const updatePlanejamentoStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      return await graphqlRequest("UPDATE_PLANEJAMENTO", {
+        id,
+        planejamento: { status }
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["all-planejamentos"] });
+    },
+  });
 
-      <Tabs defaultValue="lotes" value={selectedTab} onValueChange={(value) => setSelectedTab(value as 'lotes' | 'canteiros')}>
-        <div className="flex items-center space-x-2 mb-4">
-          <TabsList>
-            <TabsTrigger value="lotes">Lotes</TabsTrigger>
-            <TabsTrigger value="canteiros">Canteiros</TabsTrigger>
-          </TabsList>
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+  // Add the function to check and update planning status
+  const checkAndUpdatePlanningStatus = async (planejamento: Planejamento) => {
+    const hoje = new Date();
+    const dataFim = new Date(planejamento.data_fim_prevista);
+    
+    if (planejamento.status === 'Em andamento' && isBefore(dataFim, hoje)) {
+      try {
+        await executeOperation(UPDATE_PLANEJAMENTO, {
+          id: planejamento.id,
+          planejamento: { status: 'Concluído' }
+        });
+        
+        // Criar atividade de conclusão
+        await executeOperation(INSERT_ATIVIDADE, {
+          atividade: {
+            tipo: "Conclusão de Planejamento",
+            data_prevista: hoje.toISOString(),
+            observacoes: `Planejamento concluído para ${planejamento.cultura?.nome || 'cultura'} em ${planejamento.lote?.nome || planejamento.canteiro?.nome || 'área'}`,
+            planejamento_id: planejamento.id,
+            propriedade_id: planejamento.propriedade_id
+          }
+        });
+      } catch (error) {
+        console.error("Erro ao atualizar status do planejamento:", error);
+      }
+    } else {
+      // Verificar se precisa criar atividade de colheita
+      await checkAndCreateHarvestActivities(planejamento);
+    }
+  };
+
+  // Add useEffect to check planning status periodically
+  useEffect(() => {
+    // Função para verificar todos os planejamentos
+    const checkAllPlanejamentos = async () => {
+      if (!allPlanejamentosData?.planejamentos) return;
+
+      for (const planejamento of allPlanejamentosData.planejamentos) {
+        await checkAndUpdatePlanningStatus(planejamento);
+      }
+    };
+
+    // Verificar imediatamente ao carregar
+    checkAllPlanejamentos();
+
+    // Configurar verificação periódica (a cada hora)
+    const intervalId = setInterval(checkAllPlanejamentos, 60 * 60 * 1000);
+
+    // Limpar o intervalo quando o componente for desmontado
+    return () => clearInterval(intervalId);
+  }, [allPlanejamentosData?.planejamentos]);
+
+  // Add status badge component
+  const StatusBadge = ({ status }: { status?: string }) => {
+    const getStatusStyle = (status: string = 'planejado') => {
+      switch (status) {
+        case "em_andamento":
+          return "bg-orange-100 text-orange-800"; // Laranja
+        case "concluido":
+          return "bg-green-100 text-green-800"; // Verde
+        case "planejado":
+          return "bg-amber-900 text-amber-50"; // Castanho (marrom)
+        case "cancelado":
+          return "bg-red-100 text-red-800"; // Vermelho
+        default:
+          return "bg-gray-100 text-gray-800";
+      }
+    };
+    const getStatusText = (status: string = 'planejado') => {
+      switch (status) {
+        case "em_andamento":
+          return "Em Andamento";
+        case "concluido":
+          return "Concluído";
+        case "planejado":
+          return "Planejado";
+        case "cancelado":
+          return "Cancelado";
+        default:
+          return status;
+      }
+    };
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${getStatusStyle(status)}`}>
+        {getStatusText(status)}
+      </span>
+    );
+  };
+
+  // Corrigir mutation para usar 'planejamento'
+  const cancelPlanejamentoMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await graphqlRequest("UPDATE_PLANEJAMENTO", { id, planejamento: { status: "cancelado" } });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["all-planejamentos"] });
+      toast({
+        title: "Planejamento cancelado",
+        description: "O planejamento foi cancelado com sucesso.",
+      });
+      setIsCancelDialogOpen(false);
+      setPlanejamentoToCancel(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao cancelar planejamento",
+        description: error.message || "Ocorreu um erro ao cancelar o planejamento.",
+        variant: "destructive",
+      });
+      setIsCancelDialogOpen(false);
+      setPlanejamentoToCancel(null);
+    },
+  });
+
+  const handleCancelClick = (planejamento: Planejamento) => {
+    setPlanejamentoToCancel(planejamento);
+    setIsCancelDialogOpen(true);
+  };
+
+  const confirmCancel = () => {
+    if (planejamentoToCancel) {
+      cancelPlanejamentoMutation.mutate(planejamentoToCancel.id);
+    }
+  };
+
+  const closeCancelDialog = () => {
+    setIsCancelDialogOpen(false);
+    setPlanejamentoToCancel(null);
+  };
+
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [planejamentoToCancel, setPlanejamentoToCancel] = useState<any>(null);
+
+  // Função para verificar e criar atividades de colheita
+  const checkAndCreateHarvestActivities = async (planejamento: Planejamento) => {
+    if (!planejamento.data_fim_prevista) return;
+
+    const harvestDate = new Date(planejamento.data_fim_prevista);
+    const tomorrow = addDays(new Date(), 1);
+    const today = new Date();
+
+    // Verifica se a data da colheita está entre hoje e amanhã
+    if (isBefore(harvestDate, tomorrow) && isAfter(harvestDate, today)) {
+      // Verifica se já existe uma atividade de alerta de colheita para este planejamento
+      const existingActivities = await graphqlRequest(
+        "GET_ATIVIDADES",
+        { planejamento_id: planejamento.id }
+      );
+
+      const hasHarvestAlert = existingActivities?.atividades?.some(
+        (activity: any) => 
+          activity.tipo === 'Alerta de Colheita' && 
+          activity.data_prevista === format(harvestDate, 'yyyy-MM-dd')
+      );
+
+      if (!hasHarvestAlert) {
+        // Cria a atividade apenas se não existir uma atividade similar
+        await graphqlRequest(
+          "INSERT_ATIVIDADE",
+          {
+            planejamento_id: planejamento.id,
+            tipo: 'Alerta de Colheita',
+            data_prevista: format(harvestDate, 'yyyy-MM-dd'),
+            observacoes: `Colheita prevista para ${format(harvestDate, 'dd/MM/yyyy')}`
+          }
+        );
+      }
+    }
+  };
+
+  return (
+    <div className="flex-1 space-y-4 p-8 pt-6">
+      <div className="flex md:items-center justify-between md:flex-row flex-col space-y-2 mb-6">
+        <h2 className="text-3xl font-bold tracking-tight">Planejamentos</h2>
+        <div className="flex items-center md:flex-row flex-col-reverse space-y-2 space-x-2 flex-wrap gap-2">
+          <div className="relative w-full md:w-auto">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              type="search"
               placeholder="Buscar planejamentos..."
-              className="pl-8"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8"
             />
           </div>
-          <div>
-            {selectedTab === 'lotes' ? (
-              <select
-                aria-label="Filtrar por lote"
-                className="h-10 rounded-md border border-input bg-background px-3 py-2"
-                value={selectedLoteId || ""}
-                onChange={(e) => setSelectedLoteId(e.target.value || null)}
-              >
-                <option value="">Todos os Lotes</option>
-                {lotesData?.lotes?.map((lote) => (
-                  <option key={lote.id} value={lote.id}>
-                    {lote.nome}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <select
-                aria-label="Filtrar por canteiro"
-                className="h-10 rounded-md border border-input bg-background px-3 py-2"
-                value={selectedCanteiroId || ""}
-                onChange={(e) => setSelectedCanteiroId(e.target.value || null)}
-              >
-                <option value="">Todos os Canteiros</option>
-                {canteirosData?.canteiros?.map((canteiro) => (
-                  <option key={canteiro.id} value={canteiro.id}>
-                    {canteiro.nome}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+          <Button className="w-full md:w-auto" onClick={() => setIsAddDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novo Planejamento
+          </Button>
         </div>
+      </div>
 
-        <TabsContent value="lotes">
-          {isLotePlanejamentosLoading || isAllPlanejamentosLoading ? (
-            <div className="space-y-4">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
+      <Tabs
+        defaultValue="grid"
+        value={selectedTab}
+        onValueChange={(value) => setSelectedTab(value as 'grid' | 'table')}
+        className="space-y-4"
+      >
+        <TabsList>
+          <TabsTrigger value="grid">Grid</TabsTrigger>
+          <TabsTrigger value="table">Tabela</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="grid" className="space-y-4">
+          {isAllPlanejamentosLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3, 4, 5, 6].map((index) => (
+                <div key={index} className="border rounded-lg p-4">
+                  <div className="space-y-3">
+                    <Skeleton className="h-6 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Skeleton className="h-4 w-1/3" />
+                        <Skeleton className="h-4 w-1/6" />
+                      </div>
+                      <Skeleton className="h-2.5 w-full" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Skeleton className="h-4 w-2/3" />
+                      <Skeleton className="h-4 w-2/3" />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Lote</TableHead>
-                    <TableHead>Cultura</TableHead>
-                    <TableHead>Data Início</TableHead>
-                    <TableHead>Data Fim Prevista</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPlanejamentos.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-4">
-                        Nenhum planejamento encontrado
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredPlanejamentos
-                      .filter(p => p.lote_id)
-                      .map((planejamento) => (
-                        <TableRow key={planejamento.id} onClick={() => handleRowClick(planejamento.id)} className="cursor-pointer hover:bg-muted/50">
-                          <TableCell>{planejamento.lote?.nome || "Não definido"}</TableCell>
-                          <TableCell>{planejamento.cultura?.nome || "Não definido"}</TableCell>
-                          <TableCell>{format(typeof planejamento.data_inicio === 'string' ? parseISO(planejamento.data_inicio) : planejamento.data_inicio, "dd/MM/yyyy", { locale: pt })}</TableCell>
-                          <TableCell>{format(typeof planejamento.data_fim_prevista === 'string' ? parseISO(planejamento.data_fim_prevista) : planejamento.data_fim_prevista, "dd/MM/yyyy", { locale: pt })}</TableCell>
-                          <TableCell>
-                            <Badge variant={
-                              planejamento.status === "Em andamento" ? "default" :
-                              planejamento.status === "Planejado" ? "outline" :
-                              planejamento.status === "Concluído" ? "secondary" :
-                              "destructive"
-                            }>
-                              {planejamento.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end space-x-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEditClick(planejamento)}
-                              >
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  width="24"
-                                  height="24"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  className="h-4 w-4"
-                                >
-                                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
-                                  <path d="m15 5 4 4"></path>
-                                </svg>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteClick(planejamento)}
-                              >
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  width="24"
-                                  height="24"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  className="h-4 w-4 text-red-500"
-                                >
-                                  <path d="M3 6h18"></path>
-                                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                                </svg>
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                  )}
-                </TableBody>
-              </Table>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {getPlanejamentosComPercentagem().map((planejamento) => (
+                <div
+                  key={planejamento.id}
+                  className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => handleRowClick(planejamento.id)}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-medium text-lg">
+                        {planejamento.cultura?.nome || 'Cultura não encontrada'}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {format(new Date(planejamento.data_inicio), 'dd/MM/yyyy')} - {format(new Date(planejamento.data_fim_prevista), 'dd/MM/yyyy')}
+                      </p>
+                    </div>
+                    <StatusBadge status={planejamento.status} />
+                  </div>
+
+                  <div className="space-y-3 mt-4">
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm font-medium">Progresso da Colheita</span>
+                        <span className="text-sm font-medium">{planejamento.percentagem_colheita}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div
+                          className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                          style={{ width: `${planejamento.percentagem_colheita}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Área:</span>
+                        <p className="font-medium">{planejamento.area_plantada || 0} ha</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Local:</span>
+                        <p className="font-medium">
+                          {planejamento.lote?.nome || planejamento.canteiro?.nome || 'Não definido'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+
+                      {
+                        planejamento.status !== "concluido" && (
+                          <div className="flex justify-end space-x-2">
+                            <Button variant="outline" size="sm" onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditClick(planejamento)
+                            }}>
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Editar
+                            </Button>
+                          </div>
+                        )
+                      }
+                      {planejamento.status === 'em_andamento' && (
+                        <div className="flex justify-end space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCancelClick(planejamento);
+                            }}
+                          >
+                            <Ban className="h-4 w-4 mr-2" />
+                            Cancelar
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </TabsContent>
 
-        <TabsContent value="canteiros">
-          {isCanteiroPlanejamentosLoading || isAllPlanejamentosLoading ? (
-            <div className="space-y-4">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
+        <TabsContent value="table">
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cultura</TableHead>
+                  <TableHead>Data Início</TableHead>
+                  <TableHead>Data Fim Prevista</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Área (ha)</TableHead>
+                  <TableHead>Local</TableHead>
+                  <TableHead>Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isAllPlanejamentosLoading ? (
                   <TableRow>
-                    <TableHead>Canteiro</TableHead>
-                    <TableHead>Cultura</TableHead>
-                    <TableHead>Data Início</TableHead>
-                    <TableHead>Data Fim Prevista</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
+                    <TableCell colSpan={6}>
+                      <div className="flex items-center justify-center h-24">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                      </div>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPlanejamentos.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-4">
-                        Nenhum planejamento encontrado
+                ) : getPlanejamentos().length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center">
+                      Nenhum planejamento encontrado
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  getPlanejamentos().map((planejamento) => (
+                    <TableRow
+                      key={planejamento.id}
+                      className="cursor-pointer"
+                      onClick={() => handleRowClick(planejamento.id)}
+                    >
+                      <TableCell>{planejamento.cultura?.nome || 'Cultura não encontrada'}</TableCell>
+                      <TableCell>{format(new Date(planejamento.data_inicio), 'dd/MM/yyyy')}</TableCell>
+                      <TableCell>{format(new Date(planejamento.data_fim_prevista), 'dd/MM/yyyy')}</TableCell>
+                      <TableCell>
+                        <StatusBadge status={planejamento.status} />
                       </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredPlanejamentos
-                      .filter(p => p.canteiro_id)
-                      .map((planejamento) => (
-                        <TableRow key={planejamento.id} onClick={() => handleRowClick(planejamento.id)} className="cursor-pointer hover:bg-muted/50">
-                          <TableCell>{planejamento.canteiro?.nome || "Não definido"}</TableCell>
-                          <TableCell>{planejamento.cultura?.nome || "Não definido"}</TableCell>
-                          <TableCell>{format(typeof planejamento.data_inicio === 'string' ? parseISO(planejamento.data_inicio) : planejamento.data_inicio, "dd/MM/yyyy", { locale: pt })}</TableCell>
-                          <TableCell>{format(typeof planejamento.data_fim_prevista === 'string' ? parseISO(planejamento.data_fim_prevista) : planejamento.data_fim_prevista, "dd/MM/yyyy", { locale: pt })}</TableCell>
-                          <TableCell>
-                            <Badge variant={
-                              planejamento.status === "Em andamento" ? "default" :
-                              planejamento.status === "Planejado" ? "outline" :
-                              planejamento.status === "Concluído" ? "secondary" :
-                              "destructive"
-                            }>
-                              {planejamento.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end space-x-1">
+                      <TableCell>{planejamento.area_plantada || 0}</TableCell>
+                      <TableCell>
+                        {planejamento.lote?.nome || planejamento.canteiro?.nome || 'Não definido'}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+
+                          {
+                            planejamento.status !== "concluido" && (
+                              <div className="flex justify-end space-x-2">
+                                <Button variant="outline" size="sm" onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditClick(planejamento)
+                                }}>
+                                  <Pencil className="h-4 w-4 mr-2" />
+                                </Button>
+                              </div>
+                            )
+                          }
+                          {planejamento.status === 'em_andamento' && (
+                            <div className="flex justify-end space-x-2">
                               <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEditClick(planejamento)}
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCancelClick(planejamento);
+                                }}
                               >
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  width="24"
-                                  height="24"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  className="h-4 w-4"
-                                >
-                                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
-                                  <path d="m15 5 4 4"></path>
-                                </svg>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteClick(planejamento)}
-                              >
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  width="24"
-                                  height="24"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  className="h-4 w-4 text-red-500"
-                                >
-                                  <path d="M3 6h18"></path>
-                                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                                </svg>
+                                <Ban className="h-4 w-4 mr-2" />
                               </Button>
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -971,7 +1112,7 @@ export default function PlanningPage() {
                   <FormItem>
                     <FormLabel>Cultura*</FormLabel>
                     <FormControl>
-                      <select 
+                      <select
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         {...field}
                       >
@@ -987,8 +1128,8 @@ export default function PlanningPage() {
                   </FormItem>
                 )}
               />
-              
-              {selectedTab === 'lotes' ? (
+
+              {selectedTab === 'grid' ? (
                 <FormField
                   control={addForm.control}
                   name="lote_id"
@@ -996,7 +1137,7 @@ export default function PlanningPage() {
                     <FormItem>
                       <FormLabel>Lote*</FormLabel>
                       <FormControl>
-                        <select 
+                        <select
                           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                           {...field}
                           value={field.value || ""}
@@ -1021,7 +1162,7 @@ export default function PlanningPage() {
                     <FormItem>
                       <FormLabel>Canteiro*</FormLabel>
                       <FormControl>
-                        <select 
+                        <select
                           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                           {...field}
                           value={field.value || ""}
@@ -1039,7 +1180,7 @@ export default function PlanningPage() {
                   )}
                 />
               )}
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={addForm.control}
@@ -1048,10 +1189,10 @@ export default function PlanningPage() {
                     <FormItem>
                       <FormLabel>Data de Início*</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="date" 
-                          {...field} 
-                          value={field.value ? format(field.value, 'yyyy-MM-dd') : ''} 
+                        <Input
+                          type="date"
+                          {...field}
+                          value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1065,10 +1206,10 @@ export default function PlanningPage() {
                     <FormItem>
                       <FormLabel>Data de Fim Prevista*</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="date" 
-                          {...field} 
-                          value={field.value ? format(field.value, 'yyyy-MM-dd') : ''} 
+                        <Input
+                          type="date"
+                          {...field}
+                          value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1076,7 +1217,7 @@ export default function PlanningPage() {
                   )}
                 />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={addForm.control}
@@ -1120,7 +1261,7 @@ export default function PlanningPage() {
                   )}
                 />
               </div>
-              
+
               <FormField
                 control={addForm.control}
                 name="status"
@@ -1128,7 +1269,7 @@ export default function PlanningPage() {
                   <FormItem>
                     <FormLabel>Status</FormLabel>
                     <FormControl>
-                      <select 
+                      <select
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         {...field}
                       >
@@ -1142,15 +1283,15 @@ export default function PlanningPage() {
                   </FormItem>
                 )}
               />
-              
+
               {/* Seção de Insumos */}
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-medium">Insumos</h3>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       setInsumoToAdd({ produto_id: "", quantidade: 1, unidade: "" });
                       setIsInsumoDialogOpen(true);
@@ -1159,7 +1300,7 @@ export default function PlanningPage() {
                     <Plus className="h-4 w-4 mr-1" /> Adicionar Insumo
                   </Button>
                 </div>
-                
+
                 {selectedInsumos.length === 0 ? (
                   <div className="text-center p-4 border rounded-md bg-muted/30">
                     <p className="text-sm text-muted-foreground">Nenhum insumo selecionado</p>
@@ -1182,9 +1323,9 @@ export default function PlanningPage() {
                             <TableCell>{insumo.quantidade}</TableCell>
                             <TableCell>{insumo.unidade}</TableCell>
                             <TableCell>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 onClick={() => {
                                   setSelectedInsumos(selectedInsumos.filter((_, i) => i !== index));
                                 }}
@@ -1214,7 +1355,7 @@ export default function PlanningPage() {
                   </div>
                 )}
               </div>
-              
+
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                   Cancelar
@@ -1241,10 +1382,10 @@ export default function PlanningPage() {
             </DialogDescription>
           </DialogHeader>
           <Form {...editForm}>
-            <form onSubmit={editForm.handleSubmit(onEditSubmit)} 
+            <form onSubmit={editForm.handleSubmit(onEditSubmit)}
               className="space-y-4">
               <input type="hidden" {...editForm.register("id")} />
-              
+
               <FormField
                 control={editForm.control}
                 name="cultura_id"
@@ -1252,7 +1393,7 @@ export default function PlanningPage() {
                   <FormItem>
                     <FormLabel>Cultura*</FormLabel>
                     <FormControl>
-                      <select 
+                      <select
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         {...field}
                       >
@@ -1268,8 +1409,8 @@ export default function PlanningPage() {
                   </FormItem>
                 )}
               />
-              
-              {selectedTab === 'lotes' ? (
+
+              {selectedTab === 'grid' ? (
                 <FormField
                   control={editForm.control}
                   name="lote_id"
@@ -1277,7 +1418,7 @@ export default function PlanningPage() {
                     <FormItem>
                       <FormLabel>Lote*</FormLabel>
                       <FormControl>
-                        <select 
+                        <select
                           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                           {...field}
                           value={field.value || ""}
@@ -1302,7 +1443,7 @@ export default function PlanningPage() {
                     <FormItem>
                       <FormLabel>Canteiro*</FormLabel>
                       <FormControl>
-                        <select 
+                        <select
                           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                           {...field}
                           value={field.value || ""}
@@ -1320,7 +1461,7 @@ export default function PlanningPage() {
                   )}
                 />
               )}
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={editForm.control}
@@ -1329,10 +1470,10 @@ export default function PlanningPage() {
                     <FormItem>
                       <FormLabel>Data de Início*</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="date" 
-                          {...field} 
-                          value={field.value ? format(field.value, 'yyyy-MM-dd') : ''} 
+                        <Input
+                          type="date"
+                          {...field}
+                          value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1346,10 +1487,10 @@ export default function PlanningPage() {
                     <FormItem>
                       <FormLabel>Data de Fim Prevista*</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="date" 
-                          {...field} 
-                          value={field.value ? format(field.value, 'yyyy-MM-dd') : ''} 
+                        <Input
+                          type="date"
+                          {...field}
+                          value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1357,7 +1498,7 @@ export default function PlanningPage() {
                   )}
                 />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={editForm.control}
@@ -1401,7 +1542,7 @@ export default function PlanningPage() {
                   )}
                 />
               </div>
-              
+
               <FormField
                 control={editForm.control}
                 name="status"
@@ -1409,7 +1550,7 @@ export default function PlanningPage() {
                   <FormItem>
                     <FormLabel>Status</FormLabel>
                     <FormControl>
-                      <select 
+                      <select
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         {...field}
                       >
@@ -1423,19 +1564,19 @@ export default function PlanningPage() {
                   </FormItem>
                 )}
               />
-              
+
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                   Cancelar
                 </Button>
-                <Button 
-                  type="button" 
+                <Button
+                  type="button"
                   onClick={() => {
                     console.log("Botão Salvar clicado");
                     const formData = editForm.getValues();
                     console.log("Dados do formulário:", formData);
                     editPlanejamentoMutation.mutate(formData);
-                  }} 
+                  }}
                   disabled={editPlanejamentoMutation.isPending}
                 >
                   {editPlanejamentoMutation.isPending && (
@@ -1525,7 +1666,7 @@ export default function PlanningPage() {
                   >
                     <option value="">Selecione um insumo</option>
                     {insumosData.produtos_estoque
-                      .filter(produto => produto.quantidade > 0)
+                      .filter(produto => (produto.quantidade ?? 0) > 0)
                       .map((produto) => (
                         <option key={produto.id} value={produto.id}>
                           {produto.nome} ({produto.quantidade} {produto.unidade})
@@ -1542,7 +1683,7 @@ export default function PlanningPage() {
                     </p>
                   )}
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label htmlFor="quantidade" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Quantidade</label>
@@ -1557,25 +1698,25 @@ export default function PlanningPage() {
                         const quantidade = parseFloat(e.target.value) || 0;
                         const preco = insumoToAdd.preco_unitario || 0;
                         setInsumoToAdd({
-                          ...insumoToAdd, 
+                          ...insumoToAdd,
                           quantidade: quantidade,
                           custo_total: preco * quantidade
                         });
                       }}
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <label htmlFor="unidade" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Unidade</label>
                     <Input
                       id="unidade"
                       placeholder="ex: kg, L, un"
                       value={insumoToAdd.unidade}
-                      onChange={(e) => setInsumoToAdd({...insumoToAdd, unidade: e.target.value})}
+                      onChange={(e) => setInsumoToAdd({ ...insumoToAdd, unidade: e.target.value })}
                     />
                   </div>
                 </div>
-                
+
                 {insumoToAdd.produto_id && (
                   <div className="mt-4 space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -1598,7 +1739,7 @@ export default function PlanningPage() {
                           }}
                         />
                       </div>
-                      
+
                       <div className="space-y-2">
                         <label htmlFor="dose" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Dose por Hectare</label>
                         <Input
@@ -1607,11 +1748,11 @@ export default function PlanningPage() {
                           min="0"
                           step="0.01"
                           value={insumoToAdd.dose_por_hectare || 0}
-                          onChange={(e) => setInsumoToAdd({...insumoToAdd, dose_por_hectare: parseFloat(e.target.value) || 0})}
+                          onChange={(e) => setInsumoToAdd({ ...insumoToAdd, dose_por_hectare: parseFloat(e.target.value) || 0 })}
                         />
                       </div>
                     </div>
-                    
+
                     {insumoToAdd.preco_unitario && insumoToAdd.quantidade > 0 && (
                       <div className="p-3 bg-muted rounded-md">
                         <p className="text-sm font-medium">Custo Total: AOA {(insumoToAdd.preco_unitario * insumoToAdd.quantidade).toFixed(2)}</p>
@@ -1622,17 +1763,16 @@ export default function PlanningPage() {
               </div>
             </Form>
           )}
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsInsumoDialogOpen(false)}>
               Cancelar
             </Button>
             <Button
-              disabled={!insumosData?.produtos_estoque || 
-                       insumosData.produtos_estoque.length === 0 || 
-                       !insumoToAdd.produto_id || 
-                       insumoToAdd.quantidade <= 0 ||
-                       (insumoToAdd.produto_id && insumoToAdd.quantidade > (insumosData.produtos_estoque.find(p => p.id === insumoToAdd.produto_id)?.quantidade || 0))}
+              disabled={Boolean(!insumosData?.produtos_estoque ||
+                insumosData.produtos_estoque.length === 0 ||
+                !insumoToAdd.produto_id ||
+                insumoToAdd.quantidade <= 0)}
               onClick={() => {
                 // Adicionar insumo apenas se produto selecionado e quantidade válida
                 if (insumoToAdd.produto_id && insumoToAdd.quantidade > 0) {
@@ -1641,7 +1781,7 @@ export default function PlanningPage() {
                     const preco_unitario = insumoToAdd.preco_unitario || produto.preco_unitario || 0;
                     const quantidade = insumoToAdd.quantidade;
                     const custo_total = preco_unitario * quantidade;
-                    
+
                     setSelectedInsumos([
                       ...selectedInsumos,
                       {
@@ -1655,7 +1795,7 @@ export default function PlanningPage() {
                       }
                     ]);
                     setIsInsumoDialogOpen(false);
-                    
+
                     // Feedback visual para o usuário
                     toast({
                       title: "Insumo adicionado",
@@ -1673,6 +1813,25 @@ export default function PlanningPage() {
               }}
             >
               Adicionar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de confirmação de cancelamento */}
+      <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar Planejamento</DialogTitle>
+          </DialogHeader>
+          <p>Tem certeza que deseja cancelar este planejamento? Esta ação não pode ser desfeita.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeCancelDialog}>Não</Button>
+            <Button variant="destructive" onClick={confirmCancel} disabled={cancelPlanejamentoMutation.isPending}>
+              {cancelPlanejamentoMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Sim, cancelar
             </Button>
           </DialogFooter>
         </DialogContent>

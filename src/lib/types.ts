@@ -188,6 +188,10 @@ export interface Planejamento {
   data_inicio: string;
   data_fim_prevista: string;
   status: string;
+  area_plantada?: number;
+  quantidade_plantada?: number;
+  produtividade_esperada?: number;
+  percentagem_colheita?: number;
   cultura?: Crop;
   lote?: Lot;
   canteiro?: Canteiro;

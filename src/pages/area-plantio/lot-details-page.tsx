@@ -3,6 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Lot } from "@/lib/types";
 import { graphqlRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Card,
   CardHeader,
@@ -38,6 +39,13 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  Textarea,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, MapPin, Calendar, Droplets, Bug, LineChart, Edit, Trash2, Plus } from "lucide-react";
@@ -49,6 +57,10 @@ import * as z from "zod";
 import { PestList } from "@/components/pest-list";
 import { IrrigationList } from "@/components/irrigation-list";
 import { HarvestList } from "@/components/harvest-list";
+import { LocationMap } from "@/components/map/LocationMap";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { queryClient } from "@/lib/queryClient";
+import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from "@/components/ui/bar-chart";
 
 // Importante: As irrigações são gerenciadas enviando apenas o campo relevante 
 // para o banco de dados (lote_id, canteiro_id ou setor_id) dependendo do tipo 
@@ -73,12 +85,27 @@ interface Irrigation {
   updated_at?: string;
 }
 
+
+const editFormSchema = z.object({
+  nome: z.string().min(1, "Nome é obrigatório"),
+  area: z.number().min(0, "Área deve ser maior que 0"),
+  descricao: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  propriedade_id: z.string(),
+  setor_id: z.string(),
+});
+
+type EditFormValues = z.infer<typeof editFormSchema>;
+
 export default function LotDetailsPage() {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [, params] = useRoute<{ id: string }>("/lotes/:id");
   const id = params?.id;
   const [, navigate] = useLocation(); // Usado para navegação
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   
   // Query para buscar detalhes do lote
   const { data, isLoading, error } = useQuery<{ lotes_by_pk: Lot }>({
@@ -110,28 +137,57 @@ export default function LotDetailsPage() {
     enabled: !!data?.lotes_by_pk?.setor_id
   });
 
-  // Acessamos a propriedade_id diretamente do lote para garantir que funcione mesmo que o lote não tenha irrigações
-  const propriedadeId = data?.lotes_by_pk?.propriedade_id;
-  
   // Query para buscar irrigações do lote
-  const { data: irrigationData, isLoading: isLoadingIrrigations, refetch: refetchIrrigations } = useQuery({
-    queryKey: ["irrigacoes", id, propriedadeId],
+  const { data: irrigacoesData, isLoading: isLoadingIrrigacoes } = useQuery({
+    queryKey: ["irrigacoes", id],
     queryFn: async () => {
-      // Se não tiver propriedadeId, retornamos um array vazio, mas ainda permitimos adicionar irrigações
-      if (!id || !propriedadeId) return { irrigacoes: [] };
-      return await graphqlRequest("GET_IRRIGACOES_BY_LOTE" as any, { 
-        lote_id: id, // Enviar como string UUID original
-        propriedade_id: propriedadeId
-      });
+      return await graphqlRequest("GET_IRRIGACOES_BY_LOTE", { lote_id: id, propriedade_id: user?.propriedade_id });
     },
-    // A query só executa se tiver id e propriedadeId
-    enabled: !!id && !!propriedadeId
   });
 
-  const lote = data?.lotes_by_pk;
+  // Query para buscar pragas do lote
+  const { data: pragasData, isLoading: isLoadingPragas } = useQuery({
+    queryKey: ["pragas", id],
+    queryFn: async () => {
+      return await graphqlRequest("GET_PRAGAS_BY_LOTE", { lote_id: id, propriedade_id: user?.propriedade_id });
+    },
+  });
+
+  // Query para buscar colheitas do lote
+  const { data: colheitasData, isLoading: isLoadingColheitas } = useQuery({
+    queryKey: ["colheitas", id],
+    queryFn: async () => {
+      return await graphqlRequest("GET_COLHEITAS_BY_LOTE", { lote_id: id, propriedade_id: user?.propriedade_id });
+    },
+  });
+
+  const lote: Lot = data?.lotes_by_pk!;
   const cultura = cultureData?.culturas_by_pk;
   const setor = sectorData?.setores_by_pk;
-  const irrigacoes = irrigationData?.irrigacoes || [];
+  const irrigacoes = irrigacoesData?.irrigacoes || [];
+  const pragas = pragasData?.pragas || [];
+  const colheitas = colheitasData?.colheitas || [];
+
+  // Calcular estatísticas
+  const totalAguaUsada = irrigacoes.reduce((acc: number, irr: any) => acc + (irr.volume_agua || 0), 0);
+  const mediaAguaPorIrrigacao = Number(irrigacoes.length > 0 ? totalAguaUsada / irrigacoes.length : 0).toFixed(2);
+  const totalPragas = pragas.length;
+  const totalColheitas = colheitas.length;
+  const totalProduzido = colheitas.reduce((acc: number, col: any) => {
+    return acc + (Number(col.quantidade_colhida) || 0);
+  }, 0);
+
+  // Agrupar irrigações por mês para o gráfico
+  const irrigacoesPorMes = irrigacoes.reduce((acc: Record<string, number>, irr: any) => {
+    const mes = format(new Date(irr.data), 'MMM', { locale: ptBR });
+    acc[mes] = (acc[mes] || 0) + (irr.volume_agua || 0);
+    return acc;
+  }, {});
+
+  const dadosIrrigacao = Object.entries(irrigacoesPorMes).map(([mes, volume]) => ({
+    mes,
+    volume
+  }));
 
   // Estado para controlar os diálogos
   const [isIrrigationDialogOpen, setIsIrrigationDialogOpen] = useState(false);
@@ -174,13 +230,13 @@ export default function LotDetailsPage() {
       
       // Se não tivermos o propriedadeId do lote ainda, precisamos obtê-lo do lote
       // Isso garante que possamos adicionar irrigações mesmo para lotes sem registros anteriores
-      if (!propriedadeId && !data?.lotes_by_pk) {
+      if (!lote.propriedade_id && !data?.lotes_by_pk) {
         throw new Error("Dados do lote não encontrados");
       }
      
       
       // Pegar propriedadeId diretamente do lote se não estiver disponível ainda
-      const lotePropId = propriedadeId || (data?.lotes_by_pk!.propriedade_id);
+      const lotePropId = lote.propriedade_id || (data?.lotes_by_pk!.propriedade_id);
 
       
       if (!lotePropId) {
@@ -207,7 +263,7 @@ export default function LotDetailsPage() {
         description: "Registro de irrigação adicionado com sucesso",
       });
       setIsIrrigationDialogOpen(false);
-      refetchIrrigations();
+      queryClient.invalidateQueries({ queryKey: ["lote", id] });
     },
     onError: (error: Error) => {
       console.log(error)
@@ -222,7 +278,7 @@ export default function LotDetailsPage() {
   // Mutation para atualizar irrigação
   const updateIrrigationMutation = useMutation({
     mutationFn: async (values: IrrigationFormValues & { id: number }) => {
-      if (!propriedadeId) throw new Error("ID da propriedade não informado");
+      if (!lote.propriedade_id) throw new Error("ID da propriedade não informado");
       
       // Estruturar os dados conforme esperado pela API: dentro de um objeto 'irrigacao'
       const variables = {
@@ -233,7 +289,7 @@ export default function LotDetailsPage() {
           metodo: values.metodo,
           // Removido campo observacao pois não existe no banco de dados
           // Garantir que o propriedade_id esteja incluído para validação
-          propriedade_id: propriedadeId,
+          propriedade_id: lote.propriedade_id,
         }
       };
       // Using any as a workaround for the type issue with GraphQL query names
@@ -245,7 +301,7 @@ export default function LotDetailsPage() {
         description: "Registro de irrigação atualizado com sucesso",
       });
       setIsIrrigationDialogOpen(false);
-      refetchIrrigations();
+      queryClient.invalidateQueries({ queryKey: ["lote", id] });
     },
     onError: (error: Error) => {
       toast({
@@ -259,12 +315,12 @@ export default function LotDetailsPage() {
   // Mutation para excluir irrigação
   const deleteIrrigationMutation = useMutation({
     mutationFn: async (id: number) => {
-      if (!propriedadeId) throw new Error("ID da propriedade não informado");
+      if (!lote.propriedade_id) throw new Error("ID da propriedade não informado");
       // A exclusão provavelmente também espera uma estrutura específica
       return await graphqlRequest("DELETE_IRRIGACAO" as any, { 
         where: {
           id: { _eq: id },
-          propriedade_id: { _eq: propriedadeId }
+          propriedade_id: { _eq: lote.propriedade_id }
         }
       });
     },
@@ -274,7 +330,7 @@ export default function LotDetailsPage() {
         description: "Registro de irrigação excluído com sucesso",
       });
       setIsDeleteDialogOpen(false);
-      refetchIrrigations();
+      queryClient.invalidateQueries({ queryKey: ["lote", id] });
     },
     onError: (error: Error) => {
       toast({
@@ -343,16 +399,141 @@ export default function LotDetailsPage() {
     }
   }, [lote]);
 
-  // Dados simulados para as abas (apenas para pragas e colheitas)
-  const pestData = [
-    { id: 1, data: "2025-04-10", tipo_praga: "Pulgão", metodo_controle: "Biológico", resultado: "Efetivo" },
-    { id: 2, data: "2025-04-25", tipo_praga: "Lagarta", metodo_controle: "Químico", resultado: "Parcial" },
-  ];
+  // Formulário de edição
+  const form = useForm<EditFormValues>({
+    resolver: zodResolver(editFormSchema),
+    defaultValues: {
+      nome: "",
+      area: 0,
+      descricao: "",
+      latitude: undefined,
+      longitude: undefined,
+      propriedade_id: user?.propriedade_id || "",
+      setor_id: "",
+    },
+  });
 
-  const harvestData = [
-    { id: 1, data: "2025-05-15", quantidade: 1200, unidade: "kg", qualidade: "Boa" },
-    { id: 2, data: "2025-05-30", quantidade: 1500, unidade: "kg", qualidade: "Excelente" },
-  ];
+  // Atualizar o formulário quando o lote for carregado
+  useEffect(() => {
+    if (lote) {
+      form.reset({
+        nome: lote.nome,
+        area: lote.area,
+        descricao: lote.descricao || "",
+        latitude: lote.latitude,
+        longitude: lote.longitude,
+        propriedade_id: lote.propriedade_id,
+        setor_id: lote.setor_id,
+      });
+    }
+  }, [lote, form]);
+
+  // Mutation para atualizar lote
+  const updateLotMutation = useMutation({
+    mutationFn: async (data: EditFormValues) => {
+      return await graphqlRequest("UPDATE_LOT", {
+        id: id,
+        lote: {
+          nome: data.nome,
+          descricao: data.descricao,
+          area: data.area,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          setor_id: data.setor_id,
+          propriedade_id: data.propriedade_id,
+        }
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Sucesso",
+        description: "Lote atualizado com sucesso",
+      });
+      setIsEditDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["lote", id] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar lote",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Função para capturar localização
+  const getCurrentLocation = () => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          form.setValue("latitude", position.coords.latitude);
+          form.setValue("longitude", position.coords.longitude);
+          toast({
+            title: "Localização capturada",
+            description: "As coordenadas foram atualizadas com sucesso.",
+          });
+        },
+        (error) => {
+          toast({
+            title: "Erro ao capturar localização",
+            description: error.message,
+            variant: "destructive",
+          });
+        }
+      );
+    } else {
+      toast({
+        title: "Erro",
+        description: "Geolocalização não é suportada neste navegador.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const onSubmit = async(data: EditFormValues) => {
+    await updateLotMutation.mutateAsync(data);
+    setIsEditDialogOpen(false);
+  };
+
+
+  console.log(cultureData);
+  
+
+  const handleEditClick = () => {
+    if (lote) {
+      form.reset({
+        nome: lote.nome,
+        descricao: lote.descricao || "",
+        area: lote.area,
+        latitude: lote.latitude,
+        longitude: lote.longitude,
+        setor_id: lote.setor_id,
+        propriedade_id: lote.propriedade_id,
+      });
+      setIsEditDialogOpen(true);
+    }
+  };
+
+  const deleteLoteMutation = useMutation({
+    mutationFn: async () => {
+      return await graphqlRequest("DELETE_LOTE", { id });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Sucesso",
+        description: "Lote removido com sucesso",
+      });
+      queryClient.invalidateQueries({ queryKey: ["lotes"] });
+      navigate("/lotes");
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro",
+        description: "Erro ao remover lote",
+        variant: "destructive",
+      });
+    },
+  });
 
   if (isLoading) {
     return (
@@ -396,25 +577,21 @@ export default function LotDetailsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex md:items-center justify-between md:flex-row flex-col space-y-2 mb-6">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => navigate("/lotes")}>
-            <ArrowLeft className="h-4 w-4" />
+          <Button variant="ghost" size="icon" onClick={() => navigate("/lotes")}>
+            <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900">{lote.nome}</h1>
-            <p className="text-slate-500">Detalhes e atividades do lote</p>
-          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Lote: {lote?.nome}</h1>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <Edit className="mr-2 h-4 w-4" />
+          <Button variant="outline" onClick={() => setIsEditDialogOpen(true)}>
+            <Edit className="h-4 w-4 mr-2" />
             Editar
           </Button>
-          <Button variant="destructive">
-            <Trash2 className="mr-2 h-4 w-4" />
-            Excluir
+          <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)}>
+            <Trash2 className="h-4 w-4 mr-2" />
+            Remover
           </Button>
         </div>
       </div>
@@ -427,19 +604,15 @@ export default function LotDetailsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="relative h-64 rounded-lg overflow-hidden bg-slate-100">
-              {mapLoaded ? (
-                <div id="map" className="h-full w-full"></div>
-              ) : (
-                <div className="h-full w-full flex items-center justify-center">
-                  <div className="text-center">
-                    <MapPin className="h-12 w-12 text-slate-400 mx-auto mb-2" />
-                    <p className="text-slate-500">
-                      {lote.latitude && lote.longitude
-                        ? "Carregando mapa..."
-                        : "Coordenadas não disponíveis"}
-                    </p>
-                  </div>
+            <div className="relative h-64 rounded-lg overflow-hidden bg-slate-100 z-0">
+              {lote?.latitude && lote?.longitude && (
+                <div className="mt-4">
+                  <LocationMap
+                    latitude={lote.latitude}
+                    longitude={lote.longitude}
+                    title={lote.nome}
+                    className="z-0"
+                  />
                 </div>
               )}
             </div>
@@ -461,7 +634,7 @@ export default function LotDetailsPage() {
                 <div>
                   <h3 className="text-sm font-medium text-slate-500">Área</h3>
                   <p className="text-lg font-medium">
-                    {lote.area ? `${lote.area} m²` : 'Não informada'}
+                    {lote.area ? `${lote.area} ha` : 'Não informada'}
                   </p>
                 </div>
 
@@ -490,21 +663,11 @@ export default function LotDetailsPage() {
                   </p>
                 </div>
               </div>
-
-              <div className="pt-2 flex gap-2">
-                <Button variant="outline" className="w-1/2">
-                  <Edit className="h-4 w-4 mr-2" /> Editar Lote
-                </Button>
-                <Button variant="secondary" className="w-1/2">
-                  <MapPin className="h-4 w-4 mr-2" /> Gerenciar Localização
-                </Button>
-              </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Abas de Atividades */}
       <Card>
         <CardHeader>
           <CardTitle>Atividades e Registros</CardTitle>
@@ -539,7 +702,7 @@ export default function LotDetailsPage() {
             {/* Aba de Pragas */}
             <TabsContent value="pests" className="space-y-4">
               <PestList 
-                areaId={id} 
+                areaId={id!} 
                 areaType="lote" 
                 areaName={lote.nome} 
               />
@@ -547,7 +710,7 @@ export default function LotDetailsPage() {
 
             {/* Aba de Colheitas */}
             <TabsContent value="harvest" className="space-y-6">
-              <HarvestList areaType="lote" areaId={id} />
+              <HarvestList areaType="lote" areaId={id!} />
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -584,16 +747,235 @@ export default function LotDetailsPage() {
           <CardDescription>Dados e métricas sobre o desempenho do lote</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-12">
-            <LineChart className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">Estatísticas em desenvolvimento</h3>
-            <p className="text-slate-500 max-w-md mx-auto">
-              Esta funcionalidade está sendo desenvolvida e estará disponível em breve.
-              Aqui você poderá visualizar gráficos de produtividade, consumo de água e outros indicadores.
-            </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Métricas Gerais</h3>
+              <div className="grid grid-cols-2 gap-4">
+                {isLoadingIrrigacoes ? (
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">
+                        <Skeleton className="h-4 w-[100px]" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Skeleton className="h-8 w-[60px]" />
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Total de Água Usada</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{totalAguaUsada}L</div>
+                      <p className="text-xs text-muted-foreground">
+                        Média de {mediaAguaPorIrrigacao} Litros por Irrigação
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+                
+                {isLoadingPragas ? (
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">
+                        <Skeleton className="h-4 w-[100px]" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Skeleton className="h-8 w-[60px]" />
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Total de Pragas</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{totalPragas}</div>
+                      <p className="text-xs text-muted-foreground">
+                        {pragas.length} pragas registradas
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+                
+                {isLoadingColheitas ? (
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">
+                        <Skeleton className="h-4 w-[100px]" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Skeleton className="h-8 w-[60px]" />
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Total de Colheitas</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{totalColheitas}</div>
+                      <p className="text-xs text-muted-foreground">
+                        {totalProduzido}kg produzidos
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Consumo de Água por Mês</h3>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dadosIrrigacao}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="mes" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="volume" fill="#10B981" name="Volume (L)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover Lote</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover este lote? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteLoteMutation.mutate()}
+              disabled={deleteLoteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteLoteMutation.isPending ? (
+                <>
+                  <span className="animate-spin mr-2">⏳</span>
+                  Removendo...
+                </>
+              ) : (
+                "Remover"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="z-50 sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Lote</DialogTitle>
+            <DialogDescription>
+              Atualize as informações do lote.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="nome"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome do Lote</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="area"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Área (ha)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="descricao"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Descrição</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="space-y-2">
+                <FormLabel>Localização</FormLabel>
+                <div className="flex gap-2">
+                  <FormField
+                    control={form.control}
+                    name="latitude"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <FormControl>
+                          <Input type="number" step="any" {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="longitude"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <FormControl>
+                          <Input type="number" step="any" {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="button" variant="outline" onClick={getCurrentLocation}>
+                    <MapPin className="h-4 w-4 mr-2" />
+                    Capturar
+                  </Button>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button 
+                  type="submit" 
+                  disabled={updateLotMutation.isPending}
+                >
+                  {updateLotMutation.isPending ? (
+                    <>
+                      <span className="animate-spin mr-2">⏳</span>
+                      Salvando...
+                    </>
+                  ) : (
+                    "Salvar alterações"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

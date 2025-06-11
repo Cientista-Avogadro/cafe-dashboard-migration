@@ -90,4 +90,73 @@
   @apply flex items-center p-2 rounded-md;
 }
 
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  /* Ajustes para impressão */
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Garantir que o conteúdo ocupe toda a largura */
+  main {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Ajustar cores para melhor legibilidade na impressão */
+  .text-primary {
+    color: black !important;
+  }
+
+  .text-slate-600 {
+    color: black !important;
+  }
+
+  /* Remover sombras e bordas desnecessárias */
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg {
+    box-shadow: none !important;
+  }
+
+  /* Ajustar margens e padding */
+  .p-4,
+  .p-6,
+  .px-4,
+  .py-4 {
+    padding: 0 !important;
+  }
+
+  .m-4,
+  .mx-4,
+  .my-4 {
+    margin: 0 !important;
+  }
+
+  /* Garantir que tabelas e gráficos sejam visíveis */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  th, td {
+    border: 1px solid #ddd !important;
+    padding: 8px !important;
+  }
+
+  /* Ajustar tamanho de fonte para melhor legibilidade */
+  body {
+    font-size: 12pt !important;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-size: 14pt !important;
+  }
+}
+
 

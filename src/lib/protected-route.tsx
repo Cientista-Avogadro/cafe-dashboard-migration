@@ -46,12 +46,14 @@ export function ProtectedRoute({
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
           currentPath={location}
+          className="no-print"
         />
         
         <div className="flex h-full flex-1 flex-col overflow-hidden">
           <Header
             setSidebarOpen={setSidebarOpen}
             user={user}
+            className="no-print"
           />
           
           <main className="flex-1 overflow-y-auto bg-slate-50 p-4 md:p-6">
@@ -62,6 +64,7 @@ export function ProtectedRoute({
             currentPath={location}
             mobileMenuOpen={mobileMenuOpen}
             setMobileMenuOpen={setMobileMenuOpen}
+            className="no-print"
           />
         </div>
       </div>

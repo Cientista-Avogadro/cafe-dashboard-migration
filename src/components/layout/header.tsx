@@ -6,9 +6,10 @@ import { Link } from 'wouter';
 interface HeaderProps {
   setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
   user: PublicUser;
+  className?: string;
 }
 
-export default function Header({ setSidebarOpen, user }: HeaderProps) {
+export default function Header({ setSidebarOpen, user, className }: HeaderProps) {
   const [profileOpen, setProfileOpen] = useState(false);
   const { logoutMutation } = useAuth();
   
@@ -17,7 +18,7 @@ export default function Header({ setSidebarOpen, user }: HeaderProps) {
   };
   
   return (
-    <header className="bg-white shadow-sm md:hidden">
+    <header className={`bg-white shadow-sm md:hidden ${className || ''}`}>
       <div className="py-3 px-4 flex justify-between items-center">
         <button 
           onClick={() => setSidebarOpen(true)} 
@@ -44,14 +45,14 @@ export default function Header({ setSidebarOpen, user }: HeaderProps) {
         >
           <div className="py-1">
             <Link 
-              href="/configuracoes" 
+              href="/sistema/usuarios" 
               className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
               onClick={() => setProfileOpen(false)}
             >
               Meu Perfil
             </Link>
             <Link 
-              href="/configuracoes" 
+              href="/sistema/configuracao" 
               className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
               onClick={() => setProfileOpen(false)}
             >

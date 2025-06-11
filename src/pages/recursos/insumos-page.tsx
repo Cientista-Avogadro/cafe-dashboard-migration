@@ -52,13 +52,18 @@ import {
   Grid,
   Package2,
   Leaf,
-  Droplet
+  Droplet,
+  Download,
+  Printer,
+  FileText
 } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 // Esquema de validação para insumo
 const insumoSchema = z.object({
@@ -256,6 +261,52 @@ export default function InsumosPage() {
     }
   });
 
+  const handleExportCSV = () => {
+    const headers = ["Nome", "Categoria", "Quantidade", "Unidade", "Preço Unitário", "Valor Total"];
+    const rows = filteredInsumos.map(item => [
+      item.nome,
+      item.categoria || '',
+      item.quantidade || 0,
+      item.unidade || '',
+      item.preco_unitario || 0,
+      (item.quantidade || 0) * (item.preco_unitario || 0)
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `insumos_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExportPDF = async () => {
+    const tableElement = document.querySelector('[data-table="insumos"]') as HTMLElement;
+    if (!tableElement) return;
+    
+    const canvas = await html2canvas(tableElement);
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth - 40;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    
+    pdf.addImage(imgData, "PNG", 20, 20, imgWidth, imgHeight);
+    pdf.save(`insumos_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   // Renderização de estado de carregamento
   if (isLoading) {
     return (
@@ -308,9 +359,23 @@ export default function InsumosPage() {
           <h1 className="text-3xl font-bold">Insumos Agrícolas</h1>
           <p className="text-muted-foreground mt-1">Gerencie todos os insumos utilizados na propriedade</p>
         </div>
-        <Button onClick={() => setIsAddDialogOpen(true)} className="bg-green-600 hover:bg-green-700">
-          <Plus className="mr-2 h-4 w-4" /> Novo Insumo
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button onClick={() => setIsAddDialogOpen(true)} className="bg-green-600 hover:bg-green-700">
+            <Plus className="mr-2 h-4 w-4" /> Novo Insumo
+          </Button>
+          <Button variant="outline" onClick={handleExportCSV} className="no-print">
+            <FileText className="mr-2 h-4 w-4" />
+            Exportar CSV
+          </Button>
+          <Button variant="outline" onClick={handlePrint} className="no-print">
+            <Printer className="mr-2 h-4 w-4" />
+            Imprimir
+          </Button>
+          <Button variant="outline" onClick={handleExportPDF} className="no-print">
+            <Download className="mr-2 h-4 w-4" />
+            Exportar PDF
+          </Button>
+        </div>
       </div>
 
       {/* Estatísticas rápidas */}
@@ -424,7 +489,7 @@ export default function InsumosPage() {
             </div>
           ) : filteredInsumos && filteredInsumos.length > 0 ? (
             viewMode === "table" ? (
-              <div className="rounded-md border">
+              <div className="rounded-md border" data-table="insumos">
                 <Table>
                   <TableHeader>
                     <TableRow>

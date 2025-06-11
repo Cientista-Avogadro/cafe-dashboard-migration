@@ -6,6 +6,9 @@ import { queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
+import { Download, Printer, FileText } from "lucide-react";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 // Componentes UI
 import {
@@ -331,22 +334,77 @@ export default function EstoquePage() {
     saidas: filteredMovimentacoes.filter(m => m.tipo === "saida").length,
   };
 
+  const handleExportCSV = () => {
+    const headers = ["Nome", "Categoria", "Quantidade", "Unidade", "Preço Unitário", "Valor Total"];
+    const rows = produtosData?.produtos_estoque.map(item => [
+      item.nome,
+      item.categoria || '',
+      item.quantidade || 0,
+      item.unidade || '',
+      item.preco_unitario || 0,
+      (item.quantidade || 0) * (item.preco_unitario || 0)
+    ]) || [];
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `estoque_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExportPDF = async () => {
+    const tableElement = document.querySelector('[data-table="estoque"]') as HTMLElement;
+    if (!tableElement) return;
+    
+    const canvas = await html2canvas(tableElement);
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth - 40;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    
+    pdf.addImage(imgData, "PNG", 20, 20, imgWidth, imgHeight);
+    pdf.save(`estoque_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Histórico de Estoque</h1>
-        <div className="flex gap-2">
-          <Button 
-            onClick={() => handleNovaMovimentacao('entrada')} 
-            className="bg-green-600 hover:bg-green-700"
-          >
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Estoque</h1>
+          <p className="text-muted-foreground mt-1">Gerencie o estoque da sua propriedade</p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Button onClick={() => handleNovaMovimentacao('entrada')} className="bg-green-600 hover:bg-green-700">
             <Plus className="mr-2 h-4 w-4" /> Registrar Entrada
           </Button>
-          <Button 
-            onClick={() => handleNovaMovimentacao('saida')} 
-            className="bg-amber-600 hover:bg-amber-700"
-          >
+          <Button onClick={() => handleNovaMovimentacao('saida')} className="bg-amber-600 hover:bg-amber-700">
             <Plus className="mr-2 h-4 w-4" /> Registrar Saída
+          </Button>
+          <Button variant="outline" onClick={handleExportCSV} className="no-print">
+            <FileText className="mr-2 h-4 w-4" />
+            Exportar CSV
+          </Button>
+          <Button variant="outline" onClick={handlePrint} className="no-print">
+            <Printer className="mr-2 h-4 w-4" />
+            Imprimir
+          </Button>
+          <Button variant="outline" onClick={handleExportPDF} className="no-print">
+            <Download className="mr-2 h-4 w-4" />
+            Exportar PDF
           </Button>
         </div>
       </div>
@@ -455,7 +513,7 @@ export default function EstoquePage() {
               )}
             </div>
           ) : (
-            <div className="rounded-md border">
+            <div className="rounded-md border" data-table="estoque">
               <Table>
                 <TableHeader>
                   <TableRow>

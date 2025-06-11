@@ -25,7 +25,7 @@ import {
 } from "@/components/ui";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Plus, Search, Loader2 } from "lucide-react";
+import { Plus, Search, Loader2, MapPin } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -172,6 +172,11 @@ export default function LotsPage() {
     lote.nome.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const getCulturaNameById = (id: string) => {
+    const cultura = culturasData?.culturas?.find((cultura) => cultura.id === id);
+    return cultura?.nome ?? "-";
+  };
+
   // Loading
   if (isLoadingLots) {
     return (
@@ -279,7 +284,7 @@ export default function LotsPage() {
                       <TableRow key={lote.id} className="cursor-pointer hover:bg-slate-50" onClick={() => navigate(`/lotes/${lote.id}`)}>
                         <TableCell className="font-medium">{lote.nome}</TableCell>
                         <TableCell>{lote.setor_nome ?? "-"}</TableCell>
-                        
+                        <TableCell>{getCulturaNameById(lote.cultura_atual_id ?? "")}</TableCell>
                         <TableCell>
                           <Badge variant={lote.status === "Disponível" ? "outline" : "default"}>
                             {lote.status ?? "Disponível"}
@@ -445,9 +450,35 @@ export default function LotsPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Latitude</FormLabel>
-                      <FormControl>
-                        <Input type="number" step="any" placeholder="Ex: -23.5505" {...field} />
-                      </FormControl>
+                      <div className="flex gap-2">
+                        <FormControl>
+                          <Input type="number" step="any" placeholder="Ex: -23.5505" {...field} />
+                        </FormControl>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => {
+                            if (navigator.geolocation) {
+                              navigator.geolocation.getCurrentPosition(
+                                (position) => {
+                                  addForm.setValue("latitude", position.coords.latitude);
+                                  addForm.setValue("longitude", position.coords.longitude);
+                                },
+                                (error) => {
+                                  toast({
+                                    title: "Erro",
+                                    description: "Não foi possível obter sua localização.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              );
+                            }
+                          }}
+                        >
+                          <MapPin className="h-4 w-4" />
+                        </Button>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -471,9 +502,9 @@ export default function LotsPage() {
                 name="area"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Área (m²)</FormLabel>
+                    <FormLabel>Área (ha)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="Ex: 1000" {...field} />
+                      <Input type="number" step="0.01" placeholder="Ex: 1.5" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

@@ -23,7 +23,7 @@ import {
 } from "@/components/ui";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Plus, Search, Loader2 } from "lucide-react";
+import { Plus, Search, Loader2, MapPin } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -212,7 +212,7 @@ export default function CanteirosPage() {
 
   return (
     <div className="container mx-auto py-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between md:items-center md:flex-row flex-col space-y-2 mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Canteiros</h1>
           <p className="text-muted-foreground">
@@ -284,7 +284,7 @@ export default function CanteirosPage() {
                 <TableHead>Lote</TableHead>
                 <TableHead>Cultura</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Área (m²)</TableHead>
+                <TableHead>Área (ha)</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -315,7 +315,7 @@ export default function CanteirosPage() {
                         {canteiro.status || "Não definido"}
                       </Badge>
                     </TableCell>
-                    <TableCell>{canteiro.area ? `${canteiro.area} m²` : "Não definido"}</TableCell>
+                    <TableCell>{canteiro.area ? `${canteiro.area} ha` : "Não definido"}</TableCell>
                     <TableCell className="text-right">
                       <span className="text-sm text-muted-foreground">Ver detalhes</span>
                     </TableCell>
@@ -365,7 +365,7 @@ export default function CanteirosPage() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Área:</span>
-                      <span className="text-sm font-medium">{canteiro.area ? `${canteiro.area} m²` : "Não definido"}</span>
+                      <span className="text-sm font-medium">{canteiro.area ? `${canteiro.area} ha` : "Não definido"}</span>
                     </div>
                   </div>
                 </CardContent>
@@ -475,9 +475,35 @@ export default function CanteirosPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Latitude</FormLabel>
-                      <FormControl>
-                        <Input type="number" step="any" placeholder="Ex: -23.5505" {...field} />
-                      </FormControl>
+                      <div className="flex gap-2">
+                        <FormControl>
+                          <Input type="number" step="any" placeholder="Ex: -23.5505" {...field} />
+                        </FormControl>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => {
+                            if (navigator.geolocation) {
+                              navigator.geolocation.getCurrentPosition(
+                                (position) => {
+                                  addForm.setValue("latitude", position.coords.latitude);
+                                  addForm.setValue("longitude", position.coords.longitude);
+                                },
+                                (error) => {
+                                  toast({
+                                    title: "Erro",
+                                    description: "Não foi possível obter sua localização.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              );
+                            }
+                          }}
+                        >
+                          <MapPin className="h-4 w-4" />
+                        </Button>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -501,9 +527,9 @@ export default function CanteirosPage() {
                 name="area"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Área (m²)</FormLabel>
+                    <FormLabel>Área (ha)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="any" placeholder="Ex: 100" {...field} />
+                      <Input type="number" step="0.01" placeholder="Ex: 0.5" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

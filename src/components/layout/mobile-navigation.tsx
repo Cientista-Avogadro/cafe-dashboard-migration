@@ -5,12 +5,14 @@ interface MobileNavigationProps {
   currentPath: string;
   mobileMenuOpen: boolean;
   setMobileMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  className?: string;
 }
 
 export default function MobileNavigation({ 
   currentPath, 
   mobileMenuOpen, 
-  setMobileMenuOpen 
+  setMobileMenuOpen,
+  className 
 }: MobileNavigationProps) {
   const [profileOpen, setProfileOpen] = useState(false);
   
@@ -32,7 +34,7 @@ export default function MobileNavigation({
   return (
     <>
       {/* Mobile bottom navigation */}
-      <nav className="border-t border-slate-200 bg-white md:hidden">
+      <nav className={`border-t border-slate-200 bg-white md:hidden ${className || ''}`}>
         <div className="flex justify-around">
           <Link 
             href="/"
@@ -42,11 +44,11 @@ export default function MobileNavigation({
             <span className="text-xs mt-1">Dashboard</span>
           </Link>
           <Link 
-            href="/fazendas"
-            className={`flex flex-col items-center py-2 px-3 ${isActive('/fazendas') ? 'text-primary' : ''}`}
+            href="/setores"
+            className={`flex flex-col items-center py-2 px-3 ${isActive('/setores') ? 'text-primary' : ''}`}
           >
             <i className="ri-home-4-line text-xl"></i>
-            <span className="text-xs mt-1">Fazendas</span>
+            <span className="text-xs mt-1">Sectores</span>
           </Link>
           <Link 
             href="/producao"

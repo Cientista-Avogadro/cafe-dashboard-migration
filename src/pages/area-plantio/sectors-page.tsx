@@ -26,7 +26,7 @@ import {
 } from "@/components/ui";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Plus, Search, Loader2 } from "lucide-react";
+import { Plus, Search, Loader2, MapPin } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -98,7 +98,34 @@ export default function SectorsPage() {
     },
   });
 
-  // Removing unused editForm as it's not currently used in the application
+  // Função para capturar localização
+  const getCurrentLocation = () => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          addForm.setValue("latitude", position.coords.latitude);
+          addForm.setValue("longitude", position.coords.longitude);
+          toast({
+            title: "Localização capturada",
+            description: "As coordenadas foram atualizadas com sucesso.",
+          });
+        },
+        (error) => {
+          toast({
+            title: "Erro ao capturar localização",
+            description: error.message,
+            variant: "destructive",
+          });
+        }
+      );
+    } else {
+      toast({
+        title: "Erro",
+        description: "Geolocalização não é suportada neste navegador.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Função de submit do formulário de adição
   const onAddSubmit = (data: SectorFormValues) => {
@@ -302,14 +329,20 @@ export default function SectorsPage() {
                   name="area"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Área (m²)</FormLabel>
+                      <FormLabel>Área (ha)</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="Ex: 1000" {...field} />
+                        <Input type="number" step="0.01" placeholder="Ex: 2.5" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+              </div>
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" onClick={getCurrentLocation}>
+                  <MapPin className="h-4 w-4 mr-2" />
+                  Capturar Localização
+                </Button>
               </div>
               <FormField
                 control={addForm.control}

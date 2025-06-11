@@ -174,7 +174,7 @@ export default function CropsPage() {
       produtividade: undefined,
       inicio_epoca_plantio: "",
       fim_epoca_plantio: "",
-      propriedade_id: user?.propriedade_id,
+      propriedade_id: user?.propriedade_id!,
     },
   });
 
@@ -188,7 +188,7 @@ export default function CropsPage() {
       produtividade: undefined,
       inicio_epoca_plantio: "",
       fim_epoca_plantio: "",
-      propriedade_id: user?.propriedade_id,
+      propriedade_id: user?.propriedade_id!,
     },
   });
 

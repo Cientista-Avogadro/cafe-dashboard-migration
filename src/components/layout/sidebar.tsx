@@ -6,6 +6,7 @@ interface SidebarProps {
   sidebarOpen: boolean;
   setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
   currentPath: string;
+  className?: string;
 }
 
 interface NavItem {
@@ -15,7 +16,7 @@ interface NavItem {
   submenu?: NavItem[];
 }
 
-export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: SidebarProps) {
+export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath, className }: SidebarProps) {
   const { user, logoutMutation } = useAuth();
   
   // Check if current path is active
@@ -82,7 +83,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
       name: "Sistema",
       items: [
         { name: "Configurações", icon: "ri-settings-4-line", path: "/sistema/configuracao" },
-        { name: "Usuários", icon: "ri-user-settings-line", path: "/sistema/usuarios" }
+        { name: "Usuários", icon: "ri-user-settings-line", path: "/sistema/usuarios" },
+        { name: "Atividades", icon: "ri-calendar-check-line", path: "/atividades" }
       ]
     }
   ];
@@ -90,11 +92,11 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:w-64 md:flex-col">
+      <aside className={`hidden md:flex md:w-64 md:flex-col ${className || ''}`}>
         <div className="flex min-h-0 flex-1 flex-col border-r border-slate-200 bg-white">
           <div className="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
             <div className="flex flex-shrink-0 items-center px-4">
-              <span className="text-2xl font-bold text-primary">AgroGestão</span>
+              <img src="/logo.png" alt="AgroGestão" className="h-8" />
             </div>
             <nav className="mt-5 flex-1 space-y-2 px-2">
               {navCategories.map((category, categoryIndex) => (
@@ -196,7 +198,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath }: Si
             
             <div className="h-0 flex-1 overflow-y-auto pt-5 pb-4">
               <div className="flex flex-shrink-0 items-center px-4">
-                <span className="text-xl font-bold text-primary">AgroGestão</span>
+                <img src="/logo.png" alt="AgroGestão" className="h-8" />
               </div>
               <nav className="mt-5 space-y-2 px-2">
                 {navCategories.map((category, categoryIndex) => (

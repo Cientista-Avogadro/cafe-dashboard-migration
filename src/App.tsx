@@ -35,6 +35,7 @@ import UsersPage from "./pages/sistema/usuarios";
 import RelatoriosPage from './pages/gestao/relatorios-page';
 import FinanceiroPage from './pages/gestao/financeiro-page';
 import HarvestPage from "@/pages/operacoes/harvest-page";
+import AtividadesPage from './pages/atividades';
 
 function Router() {
   return (
@@ -43,6 +44,7 @@ function Router() {
       <ProtectedRoute path="/" component={DashboardPage} />
 
       <ProtectedRoute path="/culturas" component={CropsPage} />
+      <ProtectedRoute path="/atividades" component={AtividadesPage} />
       <ProtectedRoute path="/setores" component={SectorsPage} />
       <ProtectedRoute path="/setores/:id" component={SectorDetailsPage} />
       <ProtectedRoute path="/lotes" component={LotsPage} />

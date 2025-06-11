@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Sector, Lot, Canteiro } from "@/lib/types";
 import { graphqlRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { format } from "date-fns";
+import { format, addDays, isBefore, isAfter } from "date-fns";
+import { pt } from "date-fns/locale";
+import { executeOperation } from "@/lib/hasura";
+import { INSERT_ATIVIDADE } from "@/graphql/operations";
 
 import {
   Card,
@@ -101,6 +104,8 @@ interface IrrigationRecord {
   volume_agua: number;
   metodo: string;
   propriedade_id?: string;
+  lote?: Lot;
+  canteiro?: Canteiro;
 }
 
 // Removido IrrigationSubmitData pois não é mais utilizado
@@ -343,9 +348,68 @@ export default function IrrigationPage() {
       : null,
   };
 
+  // Função para verificar e criar atividades de irrigação
+  const checkAndCreateIrrigationActivities = async (irrigacao: any) => {
+    if (!irrigacao.data) return;
+
+    const irrigationDate = new Date(irrigacao.data);
+    const tomorrow = addDays(new Date(), 1);
+    const today = new Date();
+
+    // Verifica se a data da irrigação está entre hoje e amanhã
+    if (isBefore(irrigationDate, tomorrow) && isAfter(irrigationDate, today)) {
+      // Verifica se já existe uma atividade de alerta de irrigação para esta irrigação
+      const existingActivities = await graphqlRequest(
+        "GET_ATIVIDADES",
+        { propriedade_id: user?.propriedade_id }
+      );
+
+      const hasIrrigationAlert = existingActivities?.atividades?.some(
+        (activity: any) => 
+          activity.tipo === 'Alerta de Irrigação' && 
+          activity.data_prevista === format(irrigationDate, 'yyyy-MM-dd') &&
+          activity.observacoes?.includes(irrigacao.setor?.nome || '')
+      );
+
+      if (!hasIrrigationAlert) {
+        // Cria a atividade apenas se não existir uma atividade similar
+        await graphqlRequest(
+          "INSERT_ATIVIDADE",
+          {
+            propriedade_id: user?.propriedade_id,
+            tipo: 'Alerta de Irrigação',
+            data_prevista: format(irrigationDate, 'yyyy-MM-dd'),
+            observacoes: `Irrigação prevista para ${irrigacao.setor?.nome || 'setor'} em ${format(irrigationDate, 'dd/MM/yyyy')}`
+          }
+        );
+      }
+    }
+  };
+
+  // Add useEffect to check irrigation activities periodically
+  useEffect(() => {
+    // Função para verificar todas as irrigações
+    const checkAllIrrigacoes = async () => {
+      if (!irrigationData?.irrigacoes) return;
+
+      for (const irrigacao of irrigationData.irrigacoes) {
+        await checkAndCreateIrrigationActivities(irrigacao);
+      }
+    };
+
+    // Verificar imediatamente ao carregar
+    checkAllIrrigacoes();
+
+    // Configurar verificação periódica (a cada hora)
+    const intervalId = setInterval(checkAllIrrigacoes, 60 * 60 * 1000);
+
+    // Limpar o intervalo quando o componente for desmontado
+    return () => clearInterval(intervalId);
+  }, [irrigationData?.irrigacoes]);
+
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between md:items-center md:flex-row flex-col space-y-2 mb-6">
         <div>
           <h1 className="text-3xl font-bold">Gestão de Irrigação</h1>
           <p className="text-muted-foreground">Monitore e registre as irrigações da sua propriedade</p>

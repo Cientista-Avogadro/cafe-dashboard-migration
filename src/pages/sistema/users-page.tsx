@@ -141,7 +141,7 @@ export default function UsersPage() {
       const { id, ...userData } = values;
       
       // Remove password if it's empty (not being updated)
-      let userDataToSend = { ...userData };
+      const userDataToSend = { ...userData };
       if (!userData.password || userData.password.trim() === "") {
         delete userDataToSend.password;
         
@@ -311,7 +311,7 @@ export default function UsersPage() {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between md:items-center md:flex-row flex-col space-y-2 mb-6">
         <div>
           <h2 className="text-xl font-semibold">Gestão de Usuários</h2>
           <p className="text-slate-500">
