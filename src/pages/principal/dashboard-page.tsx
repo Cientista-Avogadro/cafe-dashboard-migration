@@ -176,7 +176,7 @@ export default function DashboardPage() {
 
   // Buscar atividades recentes
   const { data: atividadesData, isLoading: isLoadingAtividades } = useQuery({
-    queryKey: ["atividades-recentes", user?.propriedade_id],
+    queryKey: ["atividades", user?.propriedade_id],
     queryFn: async () => {
       if (!user?.propriedade_id) return { atividades: [] };
       const response = await executeOperation(GET_ATIVIDADES, { 
