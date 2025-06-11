@@ -74,7 +74,7 @@ export default function AuthPage() {
         <Card className="w-full max-w-md shadow-lg rounded-lg border-0 ">
           <CardHeader className="space-y-1">
             <div className="flex justify-center mb-4">
-              <img src="/logo.png" alt="Katanda" className="h-12" />
+              <img src="/CAFE_PRINCIPAL.svg" alt="Logo ogo do Software Café" className="h-12" />
             </div>
             <CardTitle className="text-2xl font-bold">Bem-vindo</CardTitle>
             <CardDescription>

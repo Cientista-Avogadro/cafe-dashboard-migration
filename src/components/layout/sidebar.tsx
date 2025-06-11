@@ -96,7 +96,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath, clas
         <div className="flex min-h-0 flex-1 flex-col border-r border-slate-200 bg-white">
           <div className="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
             <div className="flex flex-shrink-0 items-center px-4">
-              <img src="/logo.png" alt="AgroGestão" className="h-8" />
+              <img src="/CAFE_PRINCIPAL.svg" alt="Logo do Software Café" className="h-8" />
             </div>
             <nav className="mt-5 flex-1 space-y-2 px-2">
               {navCategories.map((category, categoryIndex) => (
@@ -198,7 +198,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, currentPath, clas
             
             <div className="h-0 flex-1 overflow-y-auto pt-5 pb-4">
               <div className="flex flex-shrink-0 items-center px-4">
-                <img src="/logo.png" alt="AgroGestão" className="h-8" />
+                <img src="/CAFE_PRINCIPAL.svg" alt="Logo do Software Café" className="h-8" />
               </div>
               <nav className="mt-5 space-y-2 px-2">
                 {navCategories.map((category, categoryIndex) => (

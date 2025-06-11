@@ -2,6 +2,10 @@ import { useState } from 'react';
 import type { PublicUser } from '@/hooks/use-auth';
 import { useAuth } from '@/hooks/use-auth';
 import { Link } from 'wouter';
+import { usePropertyData } from '@/hooks/use-hasura-query';
+import { Propriedade } from '@/lib/types';
+import { useQuery } from '@tanstack/react-query';
+import { graphqlRequest } from '@/lib/queryClient';
 
 interface HeaderProps {
   setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -12,6 +16,22 @@ interface HeaderProps {
 export default function Header({ setSidebarOpen, user, className }: HeaderProps) {
   const [profileOpen, setProfileOpen] = useState(false);
   const { logoutMutation } = useAuth();
+
+  // Buscar informações da propriedade atual
+  const { data } = useQuery<Propriedade | null>({
+    queryKey: ["propriedade", user?.propriedade_id],
+    queryFn: async () => {
+      if (!user?.propriedade_id) return null;
+      
+      const result = await graphqlRequest(
+        "GET_PROPRIEDADES",
+        { user_id: user.propriedade_id }
+      );
+      
+      return result.propriedades && result.propriedades.length > 0 ? result.propriedades[0] : null;
+    },
+    enabled: !!user?.propriedade_id,
+  });
   
   const handleLogout = () => {
     logoutMutation.mutate();
