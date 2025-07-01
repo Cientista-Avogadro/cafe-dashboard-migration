@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2019",
+    "noEmit": false,
+    "isolatedModules": false
+  },
+  "include": ["src/server.ts", "src/payload.config.ts", "src/collections/**/*"],
+  "ts-node": {
+    "transpileOnly": true
+  }
+}
